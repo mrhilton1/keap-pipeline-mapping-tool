@@ -2,10 +2,19 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowRight, Database, GitBranch, Zap } from "lucide-react"
 import Link from "next/link"
+import { KeapStatusIndicator } from "@/components/keap-status-indicator"
 
 export default function HomePage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
+      {/* Status Bar */}
+      <div className="border-b bg-background/80 backdrop-blur-sm sticky top-0 z-50">
+        <div className="container mx-auto px-4 py-2 flex items-center justify-between">
+          <span className="text-sm font-medium text-muted-foreground">Pipeline Migration Tool</span>
+          <KeapStatusIndicator />
+        </div>
+      </div>
+
       <div className="container mx-auto px-4 py-16">
         <div className="max-w-4xl mx-auto">
           {/* Hero Section */}
