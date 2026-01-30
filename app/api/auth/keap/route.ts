@@ -1,12 +1,40 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { headers } from "next/headers"
+
+// Helper to get origin from request
+function getOrigin(request: NextRequest): string {
+  // Try multiple methods to get the origin
+  // 1. Check x-forwarded-host header (set by Vercel/proxies)
+  const headersList = headers()
+  const forwardedHost = headersList.get("x-forwarded-host")
+  const forwardedProto = headersList.get("x-forwarded-proto") || "https"
+  
+  if (forwardedHost) {
+    return `${forwardedProto}://${forwardedHost}`
+  }
+  
+  // 2. Check host header
+  const host = headersList.get("host")
+  if (host) {
+    const proto = host.includes("localhost") ? "http" : "https"
+    return `${proto}://${host}`
+  }
+  
+  // 3. Try nextUrl.origin (may be undefined in some contexts)
+  if (request.nextUrl?.origin) {
+    return request.nextUrl.origin
+  }
+  
+  // 4. Fall back to env var or default
+  return process.env.NEXT_PUBLIC_APP_URL || "https://v0-opp2pipelines.vercel.app"
+}
 
 export async function GET(request: NextRequest) {
   // Keap OAuth configuration
   const clientId = process.env.KEAP_CLIENT_ID
   
   // Build redirect URI dynamically from the request origin
-  // This ensures it works on any Vercel deployment (preview, production, etc.)
-  const origin = request.nextUrl.origin
+  const origin = getOrigin(request)
   const dynamicRedirectUri = `${origin}/api/auth/keap/callback`
   
   // Allow override via env var, but default to dynamic
