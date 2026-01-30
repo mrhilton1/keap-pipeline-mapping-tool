@@ -3,6 +3,7 @@ export interface KeapTokens {
   refreshToken?: string
 }
 
+// ============ Legacy v1 API Types (Opportunities) ============
 export interface KeapOpportunity {
   id: string
   opportunity_title: string
@@ -20,6 +21,10 @@ export interface KeapOpportunity {
   }
   next_action_date?: string
   last_updated?: string
+  custom_fields?: Array<{
+    id: number
+    content: any
+  }>
 }
 
 export interface KeapOpportunitiesResponse {
@@ -28,34 +33,70 @@ export interface KeapOpportunitiesResponse {
   next?: string
 }
 
-export interface KeapPipelineStage {
-  id: string
-  name: string
-  order: number
-}
-
+// ============ New v2 API Types (Pipelines, Stages, Deals) ============
 export interface KeapPipeline {
   id: string
   name: string
-  stages?: KeapPipelineStage[]
-  active?: boolean
 }
 
 export interface KeapPipelinesResponse {
+  next_page_token?: string
   pipelines: KeapPipeline[]
-  count: number
+}
+
+export interface KeapStage {
+  id: string
+  name: string
+  pipeline_id?: string
+  order?: number
+}
+
+export interface KeapStagesResponse {
+  next_page_token?: string
+  stages: KeapStage[]
+}
+
+export interface KeapDeal {
+  id: string
+  name: string
+  stage_id: string
+  contact_id?: string
+  value?: number
+  currency?: string
+  custom_fields?: Record<string, any>
+}
+
+export interface KeapDealsResponse {
+  next_page_token?: string
+  deals: KeapDeal[]
+}
+
+export interface CreatePipelineRequest {
+  name: string
+  stages: string[]
+}
+
+export interface CreateDealRequest {
+  name: string
+  stage_id: string
+  contact_id?: string
+  value?: number
+  currency?: string
 }
 
 export class KeapClient {
   private accessToken: string
-  private baseUrl = "https://api.infusionsoft.com/crm/rest/v1"
+  // Legacy API for opportunities
+  private legacyBaseUrl = "https://api.infusionsoft.com/crm/rest/v1"
+  // New Pipelines API
+  private pipelinesBaseUrl = "https://slaapi.keapapis.com/v2"
 
   constructor(accessToken: string) {
     this.accessToken = accessToken
   }
 
-  private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}`
+  private async request<T>(baseUrl: string, endpoint: string, options?: RequestInit): Promise<T> {
+    const url = `${baseUrl}${endpoint}`
     console.log(`[Keap API] ${options?.method || 'GET'} ${url}`)
     
     const response = await fetch(url, {
@@ -72,7 +113,6 @@ export class KeapClient {
     
     if (!response.ok) {
       console.error(`[Keap API] Error response: ${responseText}`)
-      // Try to parse error details
       let errorMessage = `Keap API error: ${response.status} ${response.statusText}`
       try {
         const errorJson = JSON.parse(responseText)
@@ -83,7 +123,6 @@ export class KeapClient {
       throw new Error(errorMessage)
     }
 
-    // Parse JSON from text
     try {
       return JSON.parse(responseText) as T
     } catch {
@@ -92,36 +131,122 @@ export class KeapClient {
     }
   }
 
-  async getOpportunities() {
-    return this.request<KeapOpportunitiesResponse>("/opportunities?limit=100", {
-      method: "GET",
-    })
+  // ============ Legacy v1 API Methods (Opportunities) ============
+  
+  async getOpportunities(limit = 1000): Promise<KeapOpportunitiesResponse> {
+    return this.request<KeapOpportunitiesResponse>(
+      this.legacyBaseUrl, 
+      `/opportunities?limit=${limit}`,
+      { method: "GET" }
+    )
   }
 
-  async getPipelines() {
-    return this.request<KeapPipelinesResponse>("/pipelines", {
-      method: "GET",
-    })
+  async getOpportunity(id: string): Promise<KeapOpportunity> {
+    return this.request<KeapOpportunity>(
+      this.legacyBaseUrl,
+      `/opportunities/${id}`,
+      { method: "GET" }
+    )
   }
 
-  async createPipeline(data: { name: string; stages?: string[] }) {
-    return this.request("/pipelines", {
-      method: "POST",
-      body: JSON.stringify(data),
-    })
+  // ============ New v2 API Methods (Pipelines) ============
+
+  async getPipelines(pageSize = 100): Promise<KeapPipelinesResponse> {
+    return this.request<KeapPipelinesResponse>(
+      this.pipelinesBaseUrl,
+      `/pipelines?page_size=${pageSize}`,
+      { method: "GET" }
+    )
   }
 
-  async createCustomField(data: { label: string; field_type: string }) {
-    return this.request("/opportunityCustomFields", {
-      method: "POST",
-      body: JSON.stringify(data),
-    })
+  async createPipeline(data: CreatePipelineRequest): Promise<KeapPipeline> {
+    return this.request<KeapPipeline>(
+      this.pipelinesBaseUrl,
+      "/pipelines",
+      { 
+        method: "POST",
+        body: JSON.stringify(data)
+      }
+    )
   }
 
-  async updateOpportunity(opportunityId: string, data: any) {
-    return this.request(`/opportunities/${opportunityId}`, {
-      method: "PATCH",
-      body: JSON.stringify(data),
-    })
+  async getPipelineStages(pipelineId: string): Promise<KeapStagesResponse> {
+    return this.request<KeapStagesResponse>(
+      this.pipelinesBaseUrl,
+      `/pipelines/${pipelineId}/stages`,
+      { method: "GET" }
+    )
+  }
+
+  // ============ New v2 API Methods (Stages) ============
+
+  async getStages(pageSize = 100): Promise<KeapStagesResponse> {
+    return this.request<KeapStagesResponse>(
+      this.pipelinesBaseUrl,
+      `/stages?page_size=${pageSize}`,
+      { method: "GET" }
+    )
+  }
+
+  async createStage(data: { name: string; pipeline_id: string; order?: number }): Promise<KeapStage> {
+    return this.request<KeapStage>(
+      this.pipelinesBaseUrl,
+      "/stages",
+      {
+        method: "POST",
+        body: JSON.stringify(data)
+      }
+    )
+  }
+
+  // ============ New v2 API Methods (Deals) ============
+
+  async getDeals(pageSize = 100): Promise<KeapDealsResponse> {
+    return this.request<KeapDealsResponse>(
+      this.pipelinesBaseUrl,
+      `/deals?page_size=${pageSize}`,
+      { method: "GET" }
+    )
+  }
+
+  async createDeal(data: CreateDealRequest): Promise<KeapDeal> {
+    return this.request<KeapDeal>(
+      this.pipelinesBaseUrl,
+      "/deals",
+      {
+        method: "POST",
+        body: JSON.stringify(data)
+      }
+    )
+  }
+
+  async createDealsBulk(deals: CreateDealRequest[]): Promise<{ deals: KeapDeal[] }> {
+    return this.request<{ deals: KeapDeal[] }>(
+      this.pipelinesBaseUrl,
+      "/deals/bulk",
+      {
+        method: "POST",
+        body: JSON.stringify({ deals })
+      }
+    )
+  }
+
+  async moveDeal(dealId: string, stageId: string): Promise<KeapDeal> {
+    return this.request<KeapDeal>(
+      this.pipelinesBaseUrl,
+      `/deals/${dealId}:move`,
+      {
+        method: "POST",
+        body: JSON.stringify({ stage_id: stageId })
+      }
+    )
+  }
+
+  async getDealsForStage(stageId: string): Promise<KeapDealsResponse> {
+    return this.request<KeapDealsResponse>(
+      this.pipelinesBaseUrl,
+      `/stages/${stageId}/deals`,
+      { method: "GET" }
+    )
   }
 }
