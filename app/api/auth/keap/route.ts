@@ -41,7 +41,8 @@ export async function GET(request: NextRequest) {
     console.log("[Keap OAuth] Redirect URI:", redirectUri)
 
     // Build Keap OAuth authorization URL
-    const authUrl = new URL("https://accounts.infusionsoft.com/app/oauth/authorize")
+    // Per docs: https://developer.keap.com/docs/xml-rpc/#authentication
+    const authUrl = new URL("https://signin.infusionsoft.com/app/oauth/authorize")
     authUrl.searchParams.set("client_id", clientId)
     authUrl.searchParams.set("redirect_uri", redirectUri)
     authUrl.searchParams.set("response_type", "code")
