@@ -1,14 +1,13 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useEffect, useState, Suspense } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { CheckCircle2, XCircle, Loader2 } from "lucide-react"
 
-export default function AuthSuccessPage() {
+function AuthSuccessContent() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const [checking, setChecking] = useState(true)
   const [hasTokens, setHasTokens] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -22,7 +21,7 @@ export default function AuthSuccessPage() {
         if (!data.cookies?.hasAccessToken) {
           setError("Tokens were not saved. Please try again.")
         }
-      } catch (err) {
+      } catch {
         setError("Failed to verify authentication")
       } finally {
         setChecking(false)
@@ -76,5 +75,17 @@ export default function AuthSuccessPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function AuthSuccessPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin" />
+      </div>
+    }>
+      <AuthSuccessContent />
+    </Suspense>
   )
 }
