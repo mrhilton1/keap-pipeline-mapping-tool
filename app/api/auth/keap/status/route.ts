@@ -16,7 +16,7 @@ function getOrigin(request: NextRequest): string {
   }
   
   return process.env.KEAP_REDIRECT_URI?.replace("/api/auth/keap/callback", "") 
-    || "https://v0-opp2pipelines.vercel.app"
+    || "https://v0-opps2pipelines.vercel.app"
 }
 
 // Debug endpoint to check OAuth configuration
