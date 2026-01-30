@@ -17,6 +17,12 @@ interface StatusData {
     hasAccessToken: boolean
     hasRefreshToken: boolean
   }
+  tokenVerification?: {
+    valid: boolean
+    v1Works?: boolean
+    v2Works?: boolean
+    error?: string
+  }
 }
 
 export function KeapStatusIndicator() {
@@ -36,8 +42,12 @@ export function KeapStatusIndicator() {
       const data: StatusData = await response.json()
       setStatusData(data)
       
-      if (data.cookies.hasAccessToken) {
+      // Check token verification status
+      if (data.cookies.hasAccessToken && data.tokenVerification?.valid) {
         setStatus("connected")
+      } else if (data.cookies.hasAccessToken && !data.tokenVerification?.valid) {
+        setStatus("error")
+        setError(data.tokenVerification?.error || "Token invalid - please re-authenticate")
       } else if (data.configuration.clientId !== "NOT SET" && data.configuration.clientSecret !== "NOT SET") {
         setStatus("configured")
       } else {
@@ -116,10 +126,18 @@ export function KeapStatusIndicator() {
           onMouseLeave={() => setShowTooltip(false)}
         >
           <div className="space-y-2 text-xs">
-            {status === "connected" && (
-              <p className="text-emerald-600 dark:text-emerald-400 font-medium">
-                ✓ Successfully authenticated with Keap
-              </p>
+            {status === "connected" && statusData?.tokenVerification && (
+              <div className="space-y-1">
+                <p className="text-emerald-600 dark:text-emerald-400 font-medium">
+                  ✓ Successfully authenticated with Keap
+                </p>
+                <p className="text-muted-foreground">
+                  v1 API (Opportunities): {statusData.tokenVerification.v1Works ? "✓" : "✗"}
+                </p>
+                <p className="text-muted-foreground">
+                  v2 API (Pipelines): {statusData.tokenVerification.v2Works ? "✓" : "✗"}
+                </p>
+              </div>
             )}
             {status === "configured" && (
               <>
