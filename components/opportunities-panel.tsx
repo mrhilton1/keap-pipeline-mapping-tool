@@ -5,8 +5,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { DollarSign, User, Search, Filter } from "lucide-react"
+import { DollarSign, User, Search } from "lucide-react"
 
 export interface Opportunity {
   id: string
@@ -111,9 +110,9 @@ export function OpportunitiesPanel({
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="space-y-3 mb-4">
+      <div className="space-y-3 mb-4 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-lg font-semibold">Opportunities</h3>
@@ -172,7 +171,7 @@ export function OpportunitiesPanel({
       </div>
 
       {/* List */}
-      <ScrollArea className="flex-1 -mx-1 px-1">
+      <div className="flex-1 overflow-auto -mx-1 px-1">
         <div className="space-y-2 pb-4">
           {filtered.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
@@ -234,7 +233,7 @@ export function OpportunitiesPanel({
             })
           )}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   )
 }
