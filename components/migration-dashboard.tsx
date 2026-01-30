@@ -11,7 +11,8 @@ import {
   AlertCircle, 
   ArrowRight,
   CheckCircle2,
-  RefreshCw
+  RefreshCw,
+  LogIn
 } from "lucide-react"
 import { OpportunitiesPanel, Opportunity } from "./opportunities-panel"
 import { PipelineBuilder, PipelineSuggestion } from "./pipeline-builder"
@@ -33,12 +34,42 @@ export function MigrationDashboard() {
   const [analyzing, setAnalyzing] = useState(false)
   const [creating, setCreating] = useState(false)
   const [migrating, setMigrating] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [authError, setAuthError] = useState(false)
   
   const [activeTab, setActiveTab] = useState("build")
   const [createdPipelines, setCreatedPipelines] = useState<Pipeline[]>([])
   
   const { toast } = useToast()
+  
+  // Handle authentication errors
+  const handleAuthError = async () => {
+    setAuthError(true)
+    // Try to refresh the token
+    setRefreshing(true)
+    try {
+      const response = await fetch("/api/auth/keap/refresh", { method: "POST" })
+      if (response.ok) {
+        setAuthError(false)
+        toast({
+          title: "Session Refreshed",
+          description: "Your Keap session has been renewed. Please try again.",
+        })
+        await loadData()
+      } else {
+        toast({
+          title: "Session Expired",
+          description: "Please sign in again to continue.",
+          variant: "destructive"
+        })
+      }
+    } catch {
+      // Token refresh failed
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   // Load initial data
   useEffect(() => {
@@ -126,6 +157,11 @@ export function MigrationDashboard() {
         
         if (!response.ok) {
           console.error(`[Dashboard] Pipeline creation failed:`, data)
+          // Check for auth error
+          if (response.status === 401) {
+            await handleAuthError()
+            throw new Error("Authentication expired - please try again after re-authenticating")
+          }
           throw new Error(data.details || data.error || "Unknown error")
         }
 
@@ -237,17 +273,56 @@ export function MigrationDashboard() {
     )
   }
 
-  if (error && opportunities.length === 0) {
+  if ((error && opportunities.length === 0) || authError) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>{error}</AlertDescription>
-      </Alert>
+      <div className="space-y-4">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            {authError 
+              ? "Your Keap session has expired. Please sign in again to continue."
+              : error}
+          </AlertDescription>
+        </Alert>
+        <div className="flex gap-2">
+          <Button onClick={() => window.location.href = "/api/auth/keap"} className="gap-2">
+            <LogIn className="w-4 h-4" />
+            Sign in with Keap
+          </Button>
+          {!authError && (
+            <Button variant="outline" onClick={loadData}>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Try Again
+            </Button>
+          )}
+        </div>
+      </div>
     )
   }
 
   return (
     <div className="space-y-6">
+      {/* Error Banner (non-fatal) */}
+      {error && !authError && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between">
+            <span>{error}</span>
+            <div className="flex gap-2 ml-4">
+              {error.toLowerCase().includes("auth") && (
+                <Button size="sm" variant="outline" onClick={() => window.location.href = "/api/auth/keap"}>
+                  <LogIn className="w-3 h-3 mr-1" />
+                  Re-authenticate
+                </Button>
+              )}
+              <Button size="sm" variant="ghost" onClick={() => setError(null)}>
+                Dismiss
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+      
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
         <Card>

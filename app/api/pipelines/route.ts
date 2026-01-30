@@ -48,9 +48,15 @@ export async function POST(request: Request) {
   try {
     const cookieStore = await cookies()
     const accessToken = cookieStore.get("keap_access_token")
+    const refreshToken = cookieStore.get("keap_refresh_token")
+
+    console.log("[Pipelines API POST] Access token present:", !!accessToken?.value)
+    console.log("[Pipelines API POST] Refresh token present:", !!refreshToken?.value)
+    console.log("[Pipelines API POST] All cookies:", cookieStore.getAll().map(c => c.name))
 
     if (!accessToken) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
+      console.error("[Pipelines API POST] No access token found in cookies")
+      return NextResponse.json({ error: "Not authenticated", details: "No access token cookie found. Please re-authenticate with Keap." }, { status: 401 })
     }
 
     const body = await request.json()
