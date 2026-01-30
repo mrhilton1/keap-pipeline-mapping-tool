@@ -73,7 +73,10 @@ export interface KeapDealsResponse {
 
 export interface CreatePipelineRequest {
   name: string
-  stages: string[]
+}
+
+export interface BulkCreateStagesRequest {
+  stages: Array<{ name: string; order: number }>
 }
 
 export interface CreateDealRequest {
@@ -165,7 +168,23 @@ export class KeapClient {
       "/pipelines",
       { 
         method: "POST",
-        body: JSON.stringify(data)
+        body: JSON.stringify({ name: data.name })
+      }
+    )
+  }
+
+  async bulkCreateStages(pipelineId: string, stages: string[]): Promise<{ stages: KeapStage[] }> {
+    const stagesWithOrder = stages.map((name, index) => ({
+      name,
+      order: index + 1
+    }))
+    
+    return this.request<{ stages: KeapStage[] }>(
+      this.pipelinesBaseUrl,
+      `/pipelines/${pipelineId}/stages/bulk`,
+      {
+        method: "POST",
+        body: JSON.stringify({ stages: stagesWithOrder })
       }
     )
   }

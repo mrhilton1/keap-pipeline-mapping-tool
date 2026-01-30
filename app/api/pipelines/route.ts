@@ -56,19 +56,33 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { name, stages } = body
 
-    if (!name || !stages || !Array.isArray(stages)) {
+    if (!name) {
       return NextResponse.json({ 
         error: "Invalid request body",
-        details: "Required: { name: string, stages: string[] }"
+        details: "Required: { name: string, stages?: string[] }"
       }, { status: 400 })
     }
 
-    console.log(`[Pipelines API] Creating pipeline: ${name} with ${stages.length} stages`)
+    console.log(`[Pipelines API] Creating pipeline: ${name}`)
     const client = new KeapClient(accessToken.value)
-    const pipeline = await client.createPipeline({ name, stages })
-
+    
+    // Step 1: Create the pipeline
+    const pipeline = await client.createPipeline({ name })
     console.log("[Pipelines API] Pipeline created:", pipeline.id)
-    return NextResponse.json(pipeline)
+
+    // Step 2: If stages provided, bulk create them
+    let createdStages: Array<{ id: string; name: string; order?: number }> = []
+    if (stages && Array.isArray(stages) && stages.length > 0) {
+      console.log(`[Pipelines API] Creating ${stages.length} stages for pipeline ${pipeline.id}`)
+      const stagesResult = await client.bulkCreateStages(pipeline.id, stages)
+      createdStages = stagesResult.stages || []
+      console.log("[Pipelines API] Stages created:", createdStages.length)
+    }
+
+    return NextResponse.json({
+      ...pipeline,
+      stages: createdStages
+    })
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error"
     console.error("[Pipelines API] Error creating pipeline:", errorMessage)

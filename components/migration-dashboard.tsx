@@ -111,6 +111,8 @@ export function MigrationDashboard() {
     
     for (const pipeline of pipelinesToCreate) {
       try {
+        console.log(`[Dashboard] Creating pipeline: ${pipeline.name} with stages:`, pipeline.stages)
+        
         const response = await fetch("/api/pipelines", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -120,16 +122,19 @@ export function MigrationDashboard() {
           })
         })
 
+        const data = await response.json()
+        
         if (!response.ok) {
-          const data = await response.json()
-          throw new Error(data.details || data.error)
+          console.error(`[Dashboard] Pipeline creation failed:`, data)
+          throw new Error(data.details || data.error || "Unknown error")
         }
 
-        const newPipeline = await response.json()
-        created.push(newPipeline)
+        console.log(`[Dashboard] Pipeline created successfully:`, data)
+        created.push(data)
       } catch (err) {
-        failed.push(pipeline.name)
-        console.error(`Failed to create pipeline ${pipeline.name}:`, err)
+        const errorMsg = err instanceof Error ? err.message : "Unknown error"
+        failed.push(`${pipeline.name}: ${errorMsg}`)
+        console.error(`[Dashboard] Failed to create pipeline ${pipeline.name}:`, err)
       }
     }
 
@@ -138,7 +143,7 @@ export function MigrationDashboard() {
     if (created.length > 0) {
       toast({
         title: "Pipelines Created",
-        description: `Successfully created ${created.length} pipeline${created.length > 1 ? 's' : ''}${failed.length > 0 ? `, ${failed.length} failed` : ''}`,
+        description: `Successfully created ${created.length} pipeline${created.length > 1 ? 's' : ''}${failed.length > 0 ? ` (${failed.length} failed)` : ''}`,
       })
       
       // Refresh pipelines list
@@ -149,9 +154,11 @@ export function MigrationDashboard() {
         setActiveTab("migrate")
       }
     } else {
+      const errorDetails = failed.length > 0 ? failed.join("; ") : "Unknown error"
+      setError(`Failed to create pipelines: ${errorDetails}`)
       toast({
         title: "Creation Failed",
-        description: "Failed to create pipelines. Please try again.",
+        description: errorDetails.length > 100 ? errorDetails.substring(0, 100) + "..." : errorDetails,
         variant: "destructive"
       })
     }
