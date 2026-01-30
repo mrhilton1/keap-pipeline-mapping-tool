@@ -104,10 +104,10 @@ export function KeapStatusIndicator() {
       <div className="inline-flex items-center gap-1.5">
         <button
           onClick={() => setShowTooltip(!showTooltip)}
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${display.bg} ${display.textColor}`}
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer hover:opacity-80 ${display.bg} ${display.textColor}`}
         >
           {display.icon}
-          <span>Keap: {display.text}</span>
+          <span>{display.text}</span>
         </button>
         <Button 
           variant="ghost" 
