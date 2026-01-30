@@ -1,8 +1,7 @@
-import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowRight, Database, GitBranch, Zap } from "lucide-react"
-import Link from "next/link"
+import { Database, GitBranch, Zap } from "lucide-react"
 import { KeapStatusIndicator } from "@/components/keap-status-indicator"
+import { SigninModal } from "@/components/signin-modal"
 
 export default function HomePage() {
   return (
@@ -23,11 +22,7 @@ export default function HomePage() {
             <p className="text-xl text-muted-foreground mb-8 text-pretty">
               Seamlessly migrate your Keap Opportunities to multiple Pipelines with our intelligent mapping tool
             </p>
-            <Link href="/auth/signin">
-              <Button size="lg" className="gap-2">
-                Get Started <ArrowRight className="w-4 h-4" />
-              </Button>
-            </Link>
+            <SigninModal />
           </div>
 
           {/* Features */}

@@ -1,27 +1,22 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { headers } from "next/headers"
 
-// Helper to get origin from request
+// Helper to get origin from request headers
 function getOrigin(request: NextRequest): string {
-  const headersList = headers()
-  const forwardedHost = headersList.get("x-forwarded-host")
-  const forwardedProto = headersList.get("x-forwarded-proto") || "https"
+  const forwardedHost = request.headers.get("x-forwarded-host")
+  const forwardedProto = request.headers.get("x-forwarded-proto") || "https"
   
   if (forwardedHost) {
     return `${forwardedProto}://${forwardedHost}`
   }
   
-  const host = headersList.get("host")
+  const host = request.headers.get("host")
   if (host) {
     const proto = host.includes("localhost") ? "http" : "https"
     return `${proto}://${host}`
   }
   
-  if (request.nextUrl?.origin) {
-    return request.nextUrl.origin
-  }
-  
-  return process.env.NEXT_PUBLIC_APP_URL || "https://v0-opp2pipelines.vercel.app"
+  return process.env.KEAP_REDIRECT_URI?.replace("/api/auth/keap/callback", "") 
+    || "https://v0-opp2pipelines.vercel.app"
 }
 
 export async function GET(request: NextRequest) {
