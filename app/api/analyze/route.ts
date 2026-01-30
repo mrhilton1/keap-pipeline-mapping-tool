@@ -1,106 +1,175 @@
-import { generateObject } from "ai"
-import { z } from "zod"
 import { cookies } from "next/headers"
-import { KeapClient } from "@/lib/keap-client"
+import { NextResponse } from "next/server"
+import { KeapClient, KeapOpportunity } from "@/lib/keap-client"
 
-export const maxDuration = 60
+// AI-powered analysis of opportunities to suggest pipeline structure
+// Uses Vercel AI SDK with OpenAI
 
-const pipelineRecommendationSchema = z.object({
-  recommendations: z.array(
-    z.object({
-      pipelineName: z.string().describe("Suggested name for the pipeline"),
-      description: z.string().describe("Why this pipeline is recommended"),
-      stages: z.array(
-        z.object({
-          name: z.string(),
-          description: z.string().describe("What happens in this stage"),
-          order: z.number(),
-        }),
-      ),
-      opportunityPatterns: z.array(z.string()).describe("Patterns in opportunity titles that fit this pipeline"),
-      estimatedCount: z.number().describe("How many opportunities would fit this pipeline"),
-    }),
-  ),
-  mappingSuggestions: z.array(
-    z.object({
-      opportunityId: z.string(),
-      opportunityTitle: z.string(),
-      suggestedPipeline: z.string(),
-      suggestedStage: z.string().optional(),
-      confidence: z.enum(["high", "medium", "low"]),
-      reasoning: z.string(),
-    }),
-  ),
-  summary: z.string().describe("Overall summary of the analysis"),
-})
+interface PipelineSuggestion {
+  name: string
+  stages: string[]
+  description: string
+  matchingOpportunities: string[] // IDs of opportunities that would fit
+}
 
-export async function POST(req: Request) {
+interface AnalysisResult {
+  suggestedPipelines: PipelineSuggestion[]
+  summary: string
+}
+
+export async function POST(request: Request) {
   try {
     const cookieStore = await cookies()
-    const accessToken = cookieStore.get("keap_access_token")?.value
+    const accessToken = cookieStore.get("keap_access_token")
 
     if (!accessToken) {
-      return Response.json({ error: "Not authenticated" }, { status: 401 })
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
     }
 
-    // Fetch opportunities
-    const keapClient = new KeapClient(accessToken)
-    const opportunities = await keapClient.getOpportunities()
+    // Get all opportunities
+    const client = new KeapClient(accessToken.value)
+    const oppResponse = await client.getOpportunities(1000)
+    const opportunities = oppResponse.opportunities || []
 
-    if (!opportunities || opportunities.length === 0) {
-      return Response.json(
-        {
-          error: "No opportunities found to analyze",
-        },
-        { status: 400 },
-      )
+    if (opportunities.length === 0) {
+      return NextResponse.json({
+        suggestedPipelines: [],
+        summary: "No opportunities found to analyze."
+      })
     }
 
-    // Prepare data for AI analysis
-    const opportunityData = opportunities.map((opp) => ({
+    // Analyze opportunities and suggest pipelines
+    const analysis = await analyzeOpportunities(opportunities)
+    
+    return NextResponse.json(analysis)
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error"
+    console.error("[Analyze API] Error:", errorMessage)
+    return NextResponse.json({ 
+      error: "Failed to analyze opportunities",
+      details: errorMessage 
+    }, { status: 500 })
+  }
+}
+
+async function analyzeOpportunities(opportunities: KeapOpportunity[]): Promise<AnalysisResult> {
+  // Check for OpenAI API key
+  const openaiKey = process.env.OPENAI_API_KEY
+  
+  if (!openaiKey) {
+    // Fallback: Simple rule-based analysis without AI
+    return simpleAnalysis(opportunities)
+  }
+
+  try {
+    // Prepare opportunity data for AI analysis
+    const oppSummary = opportunities.map(opp => ({
       id: opp.id,
       title: opp.opportunity_title,
-      stage: opp.stage?.name,
-      revenue: {
-        low: opp.projected_revenue_low,
-        high: opp.projected_revenue_high,
-      },
-      contact: opp.contact
-        ? {
-            name: `${opp.contact.first_name || ""} ${opp.contact.last_name || ""}`.trim(),
-          }
-        : null,
+      stage: opp.stage?.name || 'No Stage',
+      contact: opp.contact ? `${opp.contact.first_name || ''} ${opp.contact.last_name || ''}`.trim() : 'No Contact',
+      revenue: opp.projected_revenue_high || opp.projected_revenue_low || 0,
     }))
 
-    // Generate AI recommendations
-    const { object } = await generateObject({
-      model: "openai/gpt-5",
-      schema: pipelineRecommendationSchema,
-      prompt: `Analyze these ${opportunities.length} sales opportunities and provide intelligent recommendations for organizing them into pipelines.
-
-Opportunities data:
-${JSON.stringify(opportunityData, null, 2)}
-
-Based on the opportunity titles, current stages, and any patterns you detect:
-
-1. Suggest 2-5 new pipelines that would effectively organize these opportunities
-2. For each pipeline, recommend specific stages that reflect a typical sales journey
-3. Identify which opportunities would fit into each pipeline
-4. Provide individual mapping suggestions for each opportunity
+    // Use OpenAI to analyze and suggest pipelines
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `You are an expert CRM consultant. Analyze the provided opportunities and suggest an optimal pipeline structure.
+            
+Return a JSON object with this exact structure:
+{
+  "suggestedPipelines": [
+    {
+      "name": "Pipeline Name",
+      "stages": ["Stage 1", "Stage 2", "Stage 3", ...],
+      "description": "Brief description of what this pipeline is for",
+      "matchingOpportunities": ["id1", "id2", ...]
+    }
+  ],
+  "summary": "Overall analysis summary"
+}
 
 Consider:
-- Common patterns in opportunity titles (keywords, naming conventions, syntax)
-- Current stage information that might indicate process type
-- Revenue ranges that might suggest different sales processes
-- Industry-specific sales cycles
-- Logical progression from lead to close
-
-Be specific and actionable in your recommendations.`,
+- Group similar opportunities into pipelines
+- Suggest 2-5 stages per pipeline that represent a logical sales/service process
+- Common pipeline types: Sales, Support, Projects, Partnerships
+- Look for patterns in opportunity titles and stages`
+          },
+          {
+            role: 'user',
+            content: `Analyze these ${opportunities.length} opportunities and suggest pipeline structure:\n\n${JSON.stringify(oppSummary, null, 2)}`
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 2000,
+      }),
     })
 
-    return Response.json(object)
+    if (!response.ok) {
+      console.error('[Analyze API] OpenAI error:', await response.text())
+      return simpleAnalysis(opportunities)
+    }
+
+    const aiResponse = await response.json()
+    const content = aiResponse.choices?.[0]?.message?.content
+
+    if (!content) {
+      return simpleAnalysis(opportunities)
+    }
+
+    // Parse AI response
+    try {
+      // Extract JSON from response (might be wrapped in markdown code blocks)
+      const jsonMatch = content.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0])
+        return parsed as AnalysisResult
+      }
+    } catch (parseError) {
+      console.error('[Analyze API] Failed to parse AI response:', parseError)
+    }
+
+    return simpleAnalysis(opportunities)
   } catch (error) {
-    console.error("[v0] AI analysis error:", error)
-    return Response.json({ error: error instanceof Error ? error.message : "Analysis failed" }, { status: 500 })
+    console.error('[Analyze API] AI analysis failed:', error)
+    return simpleAnalysis(opportunities)
+  }
+}
+
+// Fallback: Simple rule-based analysis
+function simpleAnalysis(opportunities: KeapOpportunity[]): AnalysisResult {
+  // Group by existing stage names
+  const stageGroups = new Map<string, KeapOpportunity[]>()
+  
+  opportunities.forEach(opp => {
+    const stageName = opp.stage?.name || 'Uncategorized'
+    if (!stageGroups.has(stageName)) {
+      stageGroups.set(stageName, [])
+    }
+    stageGroups.get(stageName)!.push(opp)
+  })
+
+  const stages = Array.from(stageGroups.keys())
+  
+  // Create a single pipeline suggestion with discovered stages
+  const suggestedPipelines: PipelineSuggestion[] = [{
+    name: "Main Sales Pipeline",
+    stages: stages.length > 0 ? stages : ["Lead", "Qualified", "Proposal", "Negotiation", "Closed Won", "Closed Lost"],
+    description: `Pipeline created from ${opportunities.length} opportunities with ${stages.length} unique stages`,
+    matchingOpportunities: opportunities.map(o => o.id)
+  }]
+
+  return {
+    suggestedPipelines,
+    summary: `Found ${opportunities.length} opportunities across ${stages.length} stages. Suggested consolidating into a main sales pipeline.`
   }
 }
