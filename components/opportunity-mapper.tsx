@@ -64,18 +64,27 @@ export function OpportunityMapper() {
 
   const refreshData = async () => {
     try {
-      const [oppResponse, pipelineResponse] = await Promise.all([fetch("/api/opportunities"), fetch("/api/pipelines")])
-
-      if (!oppResponse.ok || !pipelineResponse.ok) {
-        throw new Error("Failed to fetch data")
-      }
+      const [oppResponse, pipelineResponse] = await Promise.all([
+        fetch("/api/opportunities"), 
+        fetch("/api/pipelines")
+      ])
 
       const oppData = await oppResponse.json()
       const pipelineData = await pipelineResponse.json()
 
+      // Check for errors with detailed messages
+      if (!oppResponse.ok) {
+        throw new Error(`Opportunities: ${oppData.details || oppData.error || 'Failed to fetch'}`)
+      }
+      if (!pipelineResponse.ok) {
+        throw new Error(`Pipelines: ${pipelineData.details || pipelineData.error || 'Failed to fetch'}`)
+      }
+
       setOpportunities(oppData.opportunities || [])
       setPipelines(pipelineData.pipelines || [])
+      setError(null)
     } catch (err) {
+      console.error("Data fetch error:", err)
       setError(err instanceof Error ? err.message : "An error occurred")
     }
   }

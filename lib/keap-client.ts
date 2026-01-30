@@ -55,7 +55,10 @@ export class KeapClient {
   }
 
   private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+    const url = `${this.baseUrl}${endpoint}`
+    console.log(`[Keap API] ${options?.method || 'GET'} ${url}`)
+    
+    const response = await fetch(url, {
       ...options,
       headers: {
         Authorization: `Bearer ${this.accessToken}`,
@@ -64,11 +67,29 @@ export class KeapClient {
       },
     })
 
+    const responseText = await response.text()
+    console.log(`[Keap API] Response status: ${response.status}`)
+    
     if (!response.ok) {
-      throw new Error(`Keap API error: ${response.status} ${response.statusText}`)
+      console.error(`[Keap API] Error response: ${responseText}`)
+      // Try to parse error details
+      let errorMessage = `Keap API error: ${response.status} ${response.statusText}`
+      try {
+        const errorJson = JSON.parse(responseText)
+        errorMessage = errorJson.message || errorJson.error || errorMessage
+      } catch {
+        // Use status text if not JSON
+      }
+      throw new Error(errorMessage)
     }
 
-    return response.json()
+    // Parse JSON from text
+    try {
+      return JSON.parse(responseText) as T
+    } catch {
+      console.error(`[Keap API] Failed to parse JSON: ${responseText}`)
+      throw new Error('Failed to parse Keap API response')
+    }
   }
 
   async getOpportunities() {
