@@ -33,12 +33,12 @@ export default async function DashboardPage({
               </AlertDescription>
             </Alert>
             <div className="flex flex-col gap-2">
-              <Link href="/api/auth/keap">
+              <a href="/api/auth/keap">
                 <Button className="w-full">Try Again</Button>
-              </Link>
-              <Link href="/">
+              </a>
+              <a href="/">
                 <Button variant="outline" className="w-full">Back to Home</Button>
-              </Link>
+              </a>
             </div>
             <p className="text-xs text-muted-foreground text-center">
               Make sure cookies are enabled and you&apos;re not in incognito mode.
