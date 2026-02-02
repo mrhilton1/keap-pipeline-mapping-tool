@@ -42,12 +42,13 @@ export async function GET(request: NextRequest) {
 
     // Build Keap OAuth authorization URL
     // Per docs: https://developer.infusionsoft.com/getting-started-oauth-keys/
-    // Note: The only valid scope is "full" - v2 Pipelines API requires separate access
+    // v1 API needs "full" scope, v2 Pipelines API (slaapi) needs "api" scope
+    // Request both to access all APIs
     const authUrl = new URL("https://accounts.infusionsoft.com/app/oauth/authorize")
     authUrl.searchParams.set("client_id", clientId)
     authUrl.searchParams.set("redirect_uri", redirectUri)
     authUrl.searchParams.set("response_type", "code")
-    authUrl.searchParams.set("scope", "full")
+    authUrl.searchParams.set("scope", "full api")
 
     return NextResponse.redirect(authUrl.toString())
   } catch (error) {
