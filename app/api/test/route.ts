@@ -73,31 +73,54 @@ export async function GET() {
       }
     }
 
-    // Test Pipelines API (v2)
-    console.log("[Test API] Testing v2 Pipelines API...")
+    // Test Pipelines API - try v1 first (more likely to work), then v2
+    console.log("[Test API] Testing v1 Pipelines API (stage_pipeline)...")
+    let v1PipelinesWorked = false
     try {
-      const pipeResponse = await fetch("https://slaapi.keapapis.com/v2/pipelines?page_size=5", {
+      const v1PipeResponse = await fetch("https://api.infusionsoft.com/crm/rest/v1/opportunity/stage_pipeline", {
         headers: { Authorization: `Bearer ${accessToken.value}` }
       })
-      const pipeText = await pipeResponse.text()
+      const v1PipeText = await v1PipeResponse.text()
       
-      if (pipeResponse.ok) {
-        const pipeData = JSON.parse(pipeText)
+      if (v1PipeResponse.ok) {
+        v1PipelinesWorked = true
         results.pipelines = {
           success: true,
-          count: pipeData.pipelines?.length || 0,
-          raw: pipeText.substring(0, 500)
-        }
-      } else {
-        results.pipelines = {
-          success: false,
-          error: `${pipeResponse.status}: ${pipeText.substring(0, 200)}`
+          count: JSON.parse(v1PipeText)?.length || 0,
+          raw: `[v1 API] ${v1PipeText.substring(0, 400)}`
         }
       }
     } catch (err) {
-      results.pipelines = {
-        success: false,
-        error: err instanceof Error ? err.message : "Unknown error"
+      console.log("[Test API] v1 pipelines failed:", err)
+    }
+
+    // Only try v2 if v1 didn't work
+    if (!v1PipelinesWorked) {
+      console.log("[Test API] Testing v2 Pipelines API...")
+      try {
+        const pipeResponse = await fetch("https://slaapi.keapapis.com/v2/pipelines?page_size=5", {
+          headers: { Authorization: `Bearer ${accessToken.value}` }
+        })
+        const pipeText = await pipeResponse.text()
+        
+        if (pipeResponse.ok) {
+          const pipeData = JSON.parse(pipeText)
+          results.pipelines = {
+            success: true,
+            count: pipeData.pipelines?.length || 0,
+            raw: `[v2 API] ${pipeText.substring(0, 400)}`
+          }
+        } else {
+          results.pipelines = {
+            success: false,
+            error: `v2: ${pipeResponse.status} (v1 also failed). v2 may need additional Keap app permissions.`
+          }
+        }
+      } catch (err) {
+        results.pipelines = {
+          success: false,
+          error: err instanceof Error ? err.message : "Unknown error"
+        }
       }
     }
 

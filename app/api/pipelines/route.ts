@@ -12,28 +12,65 @@ export async function GET() {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
     }
 
-    console.log("[Pipelines API] Fetching pipelines from new v2 API...")
     const client = new KeapClient(accessToken.value)
-    const pipelinesResponse = await client.getPipelines()
 
-    // Fetch stages for each pipeline
-    const pipelinesWithStages = await Promise.all(
-      pipelinesResponse.pipelines.map(async (pipeline) => {
-        try {
-          const stagesResponse = await client.getPipelineStages(pipeline.id)
-          return {
-            ...pipeline,
-            stages: stagesResponse.stages || []
+    // Try v1 API first (more reliable)
+    console.log("[Pipelines API] Trying v1 API (stage_pipeline)...")
+    try {
+      const v1Pipelines = await client.getV1Pipelines()
+      console.log("[Pipelines API] v1 Success, count:", v1Pipelines?.length || 0)
+      
+      // Transform v1 response to match expected format
+      const pipelines = (v1Pipelines || []).map((p: any) => ({
+        id: String(p.id),
+        name: p.name || p.stage_pipeline_name || `Pipeline ${p.id}`,
+        stages: (p.stages || p.stage_order || []).map((s: any, idx: number) => ({
+          id: String(s.id || idx),
+          name: s.name || s.stage_name || `Stage ${idx + 1}`,
+          order: s.order || s.stage_order || idx
+        }))
+      }))
+      
+      return NextResponse.json({ pipelines, api: "v1" })
+    } catch (v1Error) {
+      console.log("[Pipelines API] v1 failed, trying v2...", v1Error)
+    }
+
+    // Fall back to v2 API
+    console.log("[Pipelines API] Trying v2 API...")
+    try {
+      const pipelinesResponse = await client.getPipelines()
+
+      // Fetch stages for each pipeline
+      const pipelinesWithStages = await Promise.all(
+        pipelinesResponse.pipelines.map(async (pipeline) => {
+          try {
+            const stagesResponse = await client.getPipelineStages(pipeline.id)
+            return {
+              ...pipeline,
+              stages: stagesResponse.stages || []
+            }
+          } catch (err) {
+            console.error(`[Pipelines API] Failed to get stages for pipeline ${pipeline.id}:`, err)
+            return { ...pipeline, stages: [] }
           }
-        } catch (err) {
-          console.error(`[Pipelines API] Failed to get stages for pipeline ${pipeline.id}:`, err)
-          return { ...pipeline, stages: [] }
-        }
-      })
-    )
+        })
+      )
 
-    console.log("[Pipelines API] Success, count:", pipelinesWithStages.length)
-    return NextResponse.json({ pipelines: pipelinesWithStages })
+      console.log("[Pipelines API] v2 Success, count:", pipelinesWithStages.length)
+      return NextResponse.json({ pipelines: pipelinesWithStages, api: "v2" })
+    } catch (v2Error) {
+      const v2Message = v2Error instanceof Error ? v2Error.message : "Unknown error"
+      console.error("[Pipelines API] v2 also failed:", v2Message)
+      
+      // Return empty pipelines with helpful message
+      return NextResponse.json({ 
+        pipelines: [],
+        api: "none",
+        warning: "Could not fetch pipelines from Keap. v2 API may require additional permissions in Keap Developer Portal.",
+        v2Error: v2Message
+      })
+    }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error"
     console.error("[Pipelines API] Error:", errorMessage)

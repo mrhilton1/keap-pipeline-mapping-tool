@@ -152,6 +152,15 @@ export class KeapClient {
     )
   }
 
+  // v1 Pipelines (fallback - returns array of pipelines with stages)
+  async getV1Pipelines(): Promise<any[]> {
+    return this.request<any[]>(
+      this.legacyBaseUrl,
+      `/opportunity/stage_pipeline`,
+      { method: "GET" }
+    )
+  }
+
   // ============ New v2 API Methods (Pipelines) ============
 
   async getPipelines(pageSize = 100): Promise<KeapPipelinesResponse> {
