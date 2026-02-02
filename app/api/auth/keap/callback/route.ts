@@ -19,19 +19,6 @@ function getOrigin(request: NextRequest): string {
     || "https://v0-opps2pipelines.vercel.app"
 }
 
-// Build a Set-Cookie header value
-function buildCookie(name: string, value: string, maxAge: number): string {
-  const parts = [
-    `${name}=${value}`,
-    `Path=/`,
-    `HttpOnly`,
-    `Secure`,
-    `SameSite=Lax`,
-    `Max-Age=${maxAge}`
-  ]
-  return parts.join("; ")
-}
-
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const code = searchParams.get("code")
@@ -104,41 +91,63 @@ export async function GET(request: NextRequest) {
     const tokenData = JSON.parse(responseText)
     
     console.log("[Keap OAuth Callback] ✓ Token received!")
-    console.log("[Keap OAuth Callback] Token type:", tokenData.token_type)
     console.log("[Keap OAuth Callback] Expires in:", tokenData.expires_in, "seconds")
-    console.log("[Keap OAuth Callback] Has refresh token:", !!tokenData.refresh_token)
-    console.log("[Keap OAuth Callback] Access token length:", tokenData.access_token?.length)
 
-    // Build Set-Cookie headers manually (more reliable than NextResponse.cookies)
-    const cookies: string[] = []
-    
-    // Access token cookie
-    cookies.push(buildCookie(
-      "keap_access_token",
-      tokenData.access_token,
-      tokenData.expires_in || 86400
-    ))
-    
-    // Refresh token cookie (if present)
-    if (tokenData.refresh_token) {
-      cookies.push(buildCookie(
-        "keap_refresh_token",
-        tokenData.refresh_token,
-        60 * 60 * 24 * 30 // 30 days
-      ))
-    }
+    // Build Set-Cookie headers
+    const accessTokenCookie = [
+      `keap_access_token=${tokenData.access_token}`,
+      `Path=/`,
+      `HttpOnly`,
+      `Secure`,
+      `SameSite=Lax`,
+      `Max-Age=${tokenData.expires_in || 86400}`
+    ].join("; ")
 
-    console.log("[Keap OAuth Callback] Setting", cookies.length, "cookies")
-    console.log("[Keap OAuth Callback] Redirecting to dashboard...")
+    const refreshTokenCookie = tokenData.refresh_token ? [
+      `keap_refresh_token=${tokenData.refresh_token}`,
+      `Path=/`,
+      `HttpOnly`,
+      `Secure`,
+      `SameSite=Lax`,
+      `Max-Age=${60 * 60 * 24 * 30}`
+    ].join("; ") : null
+
+    console.log("[Keap OAuth Callback] Cookie header:", accessTokenCookie.substring(0, 50) + "...")
     console.log("[Keap OAuth Callback] ========== END ==========")
 
-    // Use native Response with multiple Set-Cookie headers
-    return new Response(null, {
-      status: 302,
-      headers: [
-        ["Location", `${origin}/dashboard?auth=success`],
-        ...cookies.map(cookie => ["Set-Cookie", cookie] as [string, string])
-      ]
+    // Return an HTML page that redirects via JavaScript
+    // This ensures the browser processes the Set-Cookie headers before navigation
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Authenticating...</title>
+  <meta http-equiv="refresh" content="0;url=${origin}/dashboard?auth=success">
+</head>
+<body>
+  <p>Authentication successful! Redirecting...</p>
+  <script>
+    // Backup redirect in case meta refresh doesn't work
+    setTimeout(function() {
+      window.location.href = "${origin}/dashboard?auth=success";
+    }, 100);
+  </script>
+</body>
+</html>`
+
+    const headers = new Headers()
+    headers.set("Content-Type", "text/html; charset=utf-8")
+    headers.append("Set-Cookie", accessTokenCookie)
+    if (refreshTokenCookie) {
+      headers.append("Set-Cookie", refreshTokenCookie)
+    }
+    // Add cache control to prevent caching
+    headers.set("Cache-Control", "no-store, no-cache, must-revalidate")
+
+    return new Response(html, {
+      status: 200,
+      headers
     })
 
   } catch (err) {
