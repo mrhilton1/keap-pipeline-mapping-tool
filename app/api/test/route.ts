@@ -3,11 +3,16 @@ import { NextResponse } from "next/server"
 
 export async function GET() {
   const results: {
-    cookies: { hasAccessToken: boolean; hasRefreshToken: boolean }
+    cookies: { 
+      hasAccessToken: boolean
+      hasRefreshToken: boolean
+      allCookieNames: string[]
+      tokenLength?: number
+    }
     opportunities: { success: boolean; count?: number; error?: string; raw?: string }
     pipelines: { success: boolean; count?: number; error?: string; raw?: string }
   } = {
-    cookies: { hasAccessToken: false, hasRefreshToken: false },
+    cookies: { hasAccessToken: false, hasRefreshToken: false, allCookieNames: [] },
     opportunities: { success: false },
     pipelines: { success: false }
   }
@@ -16,9 +21,22 @@ export async function GET() {
     const cookieStore = await cookies()
     const accessToken = cookieStore.get("keap_access_token")
     const refreshToken = cookieStore.get("keap_refresh_token")
+    const allCookies = cookieStore.getAll()
+
+    // Log everything for debugging
+    console.log("[Test API] ========== COOKIE DEBUG ==========")
+    console.log("[Test API] All cookie names:", allCookies.map(c => c.name))
+    console.log("[Test API] All cookies count:", allCookies.length)
+    console.log("[Test API] Access token cookie exists:", !!accessToken)
+    console.log("[Test API] Access token value exists:", !!accessToken?.value)
+    console.log("[Test API] Access token length:", accessToken?.value?.length || 0)
+    console.log("[Test API] Refresh token exists:", !!refreshToken?.value)
+    console.log("[Test API] ========== END DEBUG ==========")
 
     results.cookies.hasAccessToken = !!accessToken?.value
     results.cookies.hasRefreshToken = !!refreshToken?.value
+    results.cookies.allCookieNames = allCookies.map(c => c.name)
+    results.cookies.tokenLength = accessToken?.value?.length
 
     if (!accessToken?.value) {
       return NextResponse.json({
