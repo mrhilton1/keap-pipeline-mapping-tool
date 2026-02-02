@@ -2,6 +2,7 @@ import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { CheckCircle2, LogOut, AlertCircle } from "lucide-react"
 import { MigrationDashboard } from "@/components/migration-dashboard"
+import { ApiTestPanel } from "@/components/api-test-panel"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import Link from "next/link"
@@ -70,12 +71,15 @@ export default async function DashboardPage({
 
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-7xl mx-auto">
-          <div className="mb-8">
+          <div className="mb-6">
             <h1 className="text-3xl font-bold">Pipeline Migration Dashboard</h1>
             <p className="text-muted-foreground mt-1">
               Analyze opportunities, build pipelines with AI, and migrate deals
             </p>
           </div>
+
+          {/* API Test Panel */}
+          <ApiTestPanel />
 
           <MigrationDashboard />
         </div>
