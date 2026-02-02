@@ -7,7 +7,12 @@ import { Badge } from "@/components/ui/badge"
 import { CheckCircle2, XCircle, Loader2, FlaskConical } from "lucide-react"
 
 interface TestResults {
-  cookies: { hasAccessToken: boolean; hasRefreshToken: boolean }
+  cookies: { 
+    hasAccessToken: boolean
+    hasRefreshToken: boolean
+    allCookieNames?: string[]
+    tokenLength?: number
+  }
   opportunities: { success: boolean; count?: number; error?: string; raw?: string }
   pipelines: { success: boolean; count?: number; error?: string; raw?: string }
   error?: string
@@ -79,15 +84,29 @@ export function ApiTestPanel() {
         {expanded && results && (
           <div className="mt-4 space-y-3 text-sm">
             {/* Cookies Status */}
-            <div className="flex items-center gap-2">
-              {results.cookies.hasAccessToken ? (
-                <CheckCircle2 className="w-4 h-4 text-green-500" />
-              ) : (
-                <XCircle className="w-4 h-4 text-red-500" />
+            <div className="p-3 bg-muted/50 rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                {results.cookies.hasAccessToken ? (
+                  <CheckCircle2 className="w-4 h-4 text-green-500" />
+                ) : (
+                  <XCircle className="w-4 h-4 text-red-500" />
+                )}
+                <span className="font-medium">Access Token: {results.cookies.hasAccessToken ? "Present" : "Missing"}</span>
+                {results.cookies.hasRefreshToken && (
+                  <Badge variant="outline" className="text-xs">+ Refresh Token</Badge>
+                )}
+                {results.cookies.tokenLength && (
+                  <Badge variant="secondary" className="text-xs">{results.cookies.tokenLength} chars</Badge>
+                )}
+              </div>
+              {results.cookies.allCookieNames && results.cookies.allCookieNames.length > 0 && (
+                <details>
+                  <summary className="text-xs text-muted-foreground cursor-pointer">All cookies ({results.cookies.allCookieNames.length})</summary>
+                  <pre className="text-xs mt-1 p-2 bg-background rounded">{results.cookies.allCookieNames.join(", ")}</pre>
+                </details>
               )}
-              <span>Access Token: {results.cookies.hasAccessToken ? "Present" : "Missing"}</span>
-              {results.cookies.hasRefreshToken && (
-                <Badge variant="outline" className="text-xs">+ Refresh Token</Badge>
+              {results.error && (
+                <p className="text-xs text-red-600 mt-2 font-mono">{results.error}</p>
               )}
             </div>
 
@@ -99,18 +118,18 @@ export function ApiTestPanel() {
                 ) : (
                   <XCircle className="w-4 h-4 text-red-500" />
                 )}
-                <span className="font-medium">v1 Opportunities API</span>
+                <span className="font-medium">Opportunities API</span>
                 {results.opportunities.success && (
                   <Badge variant="secondary" className="text-xs">{results.opportunities.count} found</Badge>
                 )}
               </div>
               {results.opportunities.error && (
-                <p className="text-xs text-red-600 mt-1 font-mono">{results.opportunities.error}</p>
+                <p className="text-xs text-red-600 mt-1 font-mono break-all">{results.opportunities.error}</p>
               )}
               {results.opportunities.raw && (
-                <details className="mt-2">
-                  <summary className="text-xs text-muted-foreground cursor-pointer">Raw response</summary>
-                  <pre className="text-xs mt-1 p-2 bg-background rounded overflow-auto max-h-32">
+                <details className="mt-2" open>
+                  <summary className="text-xs text-muted-foreground cursor-pointer font-medium">Raw response (click to expand)</summary>
+                  <pre className="text-xs mt-1 p-2 bg-background rounded overflow-auto max-h-48 whitespace-pre-wrap">
                     {results.opportunities.raw}
                   </pre>
                 </details>
@@ -125,18 +144,18 @@ export function ApiTestPanel() {
                 ) : (
                   <XCircle className="w-4 h-4 text-red-500" />
                 )}
-                <span className="font-medium">v2 Pipelines API</span>
+                <span className="font-medium">Pipelines API</span>
                 {results.pipelines.success && (
                   <Badge variant="secondary" className="text-xs">{results.pipelines.count} found</Badge>
                 )}
               </div>
               {results.pipelines.error && (
-                <p className="text-xs text-red-600 mt-1 font-mono">{results.pipelines.error}</p>
+                <p className="text-xs text-red-600 mt-1 font-mono break-all">{results.pipelines.error}</p>
               )}
               {results.pipelines.raw && (
-                <details className="mt-2">
-                  <summary className="text-xs text-muted-foreground cursor-pointer">Raw response</summary>
-                  <pre className="text-xs mt-1 p-2 bg-background rounded overflow-auto max-h-32">
+                <details className="mt-2" open>
+                  <summary className="text-xs text-muted-foreground cursor-pointer font-medium">Raw response (click to expand)</summary>
+                  <pre className="text-xs mt-1 p-2 bg-background rounded overflow-auto max-h-48 whitespace-pre-wrap">
                     {results.pipelines.raw}
                   </pre>
                 </details>

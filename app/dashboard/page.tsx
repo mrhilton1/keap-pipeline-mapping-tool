@@ -5,7 +5,6 @@ import { MigrationDashboard } from "@/components/migration-dashboard"
 import { ApiTestPanel } from "@/components/api-test-panel"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import Link from "next/link"
 
 export default async function DashboardPage({
   searchParams,
@@ -60,12 +59,12 @@ export default async function DashboardPage({
             <CheckCircle2 className="w-5 h-5 text-green-500" />
             <span className="text-sm font-medium">Connected to Keap</span>
           </div>
-          <Link href="/api/auth/logout">
+          <a href="/api/auth/logout">
             <Button variant="ghost" size="sm">
               <LogOut className="w-4 h-4 mr-2" />
               Disconnect
             </Button>
-          </Link>
+          </a>
         </div>
       </header>
 
