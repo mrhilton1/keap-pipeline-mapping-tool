@@ -25,16 +25,19 @@ export async function POST() {
 
     console.log("[Keap Refresh] Attempting token refresh...")
 
+    // Per Keap docs: Refresh requires Basic Auth header
+    // https://developer.infusionsoft.com/getting-started-oauth-keys/
+    const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString("base64")
+
     const response = await fetch("https://api.infusionsoft.com/token", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
+        "Authorization": `Basic ${basicAuth}`,
       },
       body: new URLSearchParams({
         grant_type: "refresh_token",
         refresh_token: refreshToken.value,
-        client_id: clientId,
-        client_secret: clientSecret,
       }),
     })
 
@@ -72,6 +75,7 @@ export async function POST() {
       path: "/",
     })
 
+    // IMPORTANT: Store the new refresh token (docs say it rotates)
     if (tokenData.refresh_token) {
       jsonResponse.cookies.set("keap_refresh_token", tokenData.refresh_token, {
         httpOnly: true,
