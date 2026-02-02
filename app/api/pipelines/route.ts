@@ -19,17 +19,32 @@ export async function GET() {
     try {
       const v1Pipelines = await client.getV1Pipelines()
       console.log("[Pipelines API] v1 Success, count:", v1Pipelines?.length || 0)
+      console.log("[Pipelines API] v1 Sample:", JSON.stringify(v1Pipelines?.[0] || {}).substring(0, 500))
       
       // Transform v1 response to match expected format
-      const pipelines = (v1Pipelines || []).map((p: any) => ({
-        id: String(p.id),
-        name: p.name || p.stage_pipeline_name || `Pipeline ${p.id}`,
-        stages: (p.stages || p.stage_order || []).map((s: any, idx: number) => ({
-          id: String(s.id || idx),
-          name: s.name || s.stage_name || `Stage ${idx + 1}`,
-          order: s.order || s.stage_order || idx
-        }))
-      }))
+      // v1 format: { id, stage_pipeline_name, stages: { "stage_id": { id, stage_name, stage_order } } }
+      const pipelines = (v1Pipelines || []).map((p: any) => {
+        // Handle stages - could be object, array, or undefined
+        let stagesArray: any[] = []
+        if (p.stages) {
+          if (Array.isArray(p.stages)) {
+            stagesArray = p.stages
+          } else if (typeof p.stages === 'object') {
+            // Convert object to array
+            stagesArray = Object.values(p.stages)
+          }
+        }
+        
+        return {
+          id: String(p.id),
+          name: p.stage_pipeline_name || p.name || `Pipeline ${p.id}`,
+          stages: stagesArray.map((s: any, idx: number) => ({
+            id: String(s.id || s.stage_id || idx),
+            name: s.stage_name || s.name || `Stage ${idx + 1}`,
+            order: s.stage_order ?? s.order ?? idx
+          })).sort((a, b) => a.order - b.order)
+        }
+      })
       
       return NextResponse.json({ pipelines, api: "v1" })
     } catch (v1Error) {
