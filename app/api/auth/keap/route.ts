@@ -41,13 +41,13 @@ export async function GET(request: NextRequest) {
     console.log("[Keap OAuth] Redirect URI:", redirectUri)
 
     // Build Keap OAuth authorization URL
-    // Per docs: https://developer.keap.com/docs/xml-rpc/#authentication
-    // Request both 'full' scope (v1 API) and 'api' scope (v2 Pipelines API)
-    const authUrl = new URL("https://signin.infusionsoft.com/app/oauth/authorize")
+    // Per docs: https://developer.infusionsoft.com/getting-started-oauth-keys/
+    // Note: The only valid scope is "full" - v2 Pipelines API requires separate access
+    const authUrl = new URL("https://accounts.infusionsoft.com/app/oauth/authorize")
     authUrl.searchParams.set("client_id", clientId)
     authUrl.searchParams.set("redirect_uri", redirectUri)
     authUrl.searchParams.set("response_type", "code")
-    authUrl.searchParams.set("scope", "full|api")
+    authUrl.searchParams.set("scope", "full")
 
     return NextResponse.redirect(authUrl.toString())
   } catch (error) {
