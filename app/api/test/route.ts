@@ -111,13 +111,14 @@ export async function GET() {
         results.pipelinesV2 = {
           success: true,
           count: pipeData.pipelines?.length || 0,
-          raw: pipeText.substring(0, 400)
+          raw: pipeText.substring(0, 1000)
         }
       } else {
+        // Show full error for debugging
         results.pipelinesV2 = {
           success: false,
-          error: `${pipeResponse.status}: ${pipeText.substring(0, 300)}`,
-          raw: pipeText.substring(0, 400)
+          error: `${pipeResponse.status}: ${pipeText}`,
+          raw: pipeText
         }
       }
     } catch (err) {

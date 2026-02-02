@@ -92,6 +92,9 @@ export async function GET(request: NextRequest) {
     
     console.log("[Keap OAuth Callback] ✓ Token received!")
     console.log("[Keap OAuth Callback] Expires in:", tokenData.expires_in, "seconds")
+    console.log("[Keap OAuth Callback] Scope granted:", tokenData.scope || "not specified in response")
+    console.log("[Keap OAuth Callback] Token type:", tokenData.token_type)
+    console.log("[Keap OAuth Callback] Full response keys:", Object.keys(tokenData))
 
     // Build Set-Cookie headers
     const accessTokenCookie = [
