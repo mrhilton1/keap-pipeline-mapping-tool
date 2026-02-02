@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { CheckCircle2, XCircle, Loader2, FlaskConical } from "lucide-react"
+import { CheckCircle2, XCircle, Loader2, FlaskConical, AlertTriangle } from "lucide-react"
 
 interface TestResults {
   cookies: { 
@@ -14,7 +14,8 @@ interface TestResults {
     tokenLength?: number
   }
   opportunities: { success: boolean; count?: number; error?: string; raw?: string }
-  pipelines: { success: boolean; count?: number; error?: string; raw?: string }
+  legacyStages: { success: boolean; count?: number; error?: string; raw?: string }
+  pipelinesV2: { success: boolean; count?: number; error?: string; raw?: string }
   error?: string
 }
 
@@ -36,7 +37,8 @@ export function ApiTestPanel() {
       setResults({
         cookies: { hasAccessToken: false, hasRefreshToken: false },
         opportunities: { success: false, error: "Failed to run tests" },
-        pipelines: { success: false, error: "Failed to run tests" },
+        legacyStages: { success: false, error: "Failed to run tests" },
+        pipelinesV2: { success: false, error: "Failed to run tests" },
         error: err instanceof Error ? err.message : "Unknown error"
       })
     } finally {
@@ -56,8 +58,8 @@ export function ApiTestPanel() {
                 <Badge variant={results.opportunities.success ? "default" : "destructive"} className="text-xs">
                   Opportunities: {results.opportunities.success ? `✓ ${results.opportunities.count}` : "✗"}
                 </Badge>
-                <Badge variant={results.pipelines.success ? "default" : "destructive"} className="text-xs">
-                  Pipelines: {results.pipelines.success ? `✓ ${results.pipelines.count}` : "✗"}
+                <Badge variant={results.pipelinesV2.success ? "default" : "secondary"} className="text-xs">
+                  Pipelines v2: {results.pipelinesV2.success ? `✓ ${results.pipelinesV2.count}` : "✗ 401"}
                 </Badge>
               </div>
             )}
@@ -118,7 +120,7 @@ export function ApiTestPanel() {
                 ) : (
                   <XCircle className="w-4 h-4 text-red-500" />
                 )}
-                <span className="font-medium">Opportunities API</span>
+                <span className="font-medium">Opportunities API (v1)</span>
                 {results.opportunities.success && (
                   <Badge variant="secondary" className="text-xs">{results.opportunities.count} found</Badge>
                 )}
@@ -127,36 +129,70 @@ export function ApiTestPanel() {
                 <p className="text-xs text-red-600 mt-1 font-mono break-all">{results.opportunities.error}</p>
               )}
               {results.opportunities.raw && (
-                <details className="mt-2" open>
-                  <summary className="text-xs text-muted-foreground cursor-pointer font-medium">Raw response (click to expand)</summary>
-                  <pre className="text-xs mt-1 p-2 bg-background rounded overflow-auto max-h-48 whitespace-pre-wrap">
+                <details className="mt-2">
+                  <summary className="text-xs text-muted-foreground cursor-pointer font-medium">Raw response</summary>
+                  <pre className="text-xs mt-1 p-2 bg-background rounded overflow-auto max-h-32 whitespace-pre-wrap">
                     {results.opportunities.raw}
                   </pre>
                 </details>
               )}
             </div>
 
-            {/* Pipelines API */}
-            <div className="p-3 bg-muted/50 rounded-lg">
+            {/* Legacy Stages API */}
+            <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
               <div className="flex items-center gap-2 mb-1">
-                {results.pipelines.success ? (
+                {results.legacyStages.success ? (
+                  <AlertTriangle className="w-4 h-4 text-yellow-600" />
+                ) : (
+                  <XCircle className="w-4 h-4 text-red-500" />
+                )}
+                <span className="font-medium">Legacy Opportunity Stages (v1)</span>
+                {results.legacyStages.success && (
+                  <Badge variant="secondary" className="text-xs">{results.legacyStages.count} stages</Badge>
+                )}
+              </div>
+              <p className="text-xs text-yellow-700 dark:text-yellow-400 mb-2">
+                ⚠️ These are OLD opportunity stages, NOT your actual pipelines
+              </p>
+              {results.legacyStages.error && (
+                <p className="text-xs text-red-600 mt-1 font-mono break-all">{results.legacyStages.error}</p>
+              )}
+              {results.legacyStages.raw && (
+                <details className="mt-2">
+                  <summary className="text-xs text-muted-foreground cursor-pointer font-medium">Raw response</summary>
+                  <pre className="text-xs mt-1 p-2 bg-background rounded overflow-auto max-h-32 whitespace-pre-wrap">
+                    {results.legacyStages.raw}
+                  </pre>
+                </details>
+              )}
+            </div>
+
+            {/* Pipelines v2 API */}
+            <div className={`p-3 rounded-lg ${results.pipelinesV2.success ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'}`}>
+              <div className="flex items-center gap-2 mb-1">
+                {results.pipelinesV2.success ? (
                   <CheckCircle2 className="w-4 h-4 text-green-500" />
                 ) : (
                   <XCircle className="w-4 h-4 text-red-500" />
                 )}
-                <span className="font-medium">Pipelines API</span>
-                {results.pipelines.success && (
-                  <Badge variant="secondary" className="text-xs">{results.pipelines.count} found</Badge>
+                <span className="font-medium">Pipelines API (v2) - NEW</span>
+                {results.pipelinesV2.success && (
+                  <Badge variant="secondary" className="text-xs">{results.pipelinesV2.count} pipelines</Badge>
                 )}
               </div>
-              {results.pipelines.error && (
-                <p className="text-xs text-red-600 mt-1 font-mono break-all">{results.pipelines.error}</p>
+              <p className={`text-xs mb-2 ${results.pipelinesV2.success ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
+                {results.pipelinesV2.success 
+                  ? "✓ This is your actual pipelines data!" 
+                  : "✗ This API requires additional Keap permissions. See error below."}
+              </p>
+              {results.pipelinesV2.error && (
+                <p className="text-xs text-red-600 mt-1 font-mono break-all">{results.pipelinesV2.error}</p>
               )}
-              {results.pipelines.raw && (
-                <details className="mt-2" open>
-                  <summary className="text-xs text-muted-foreground cursor-pointer font-medium">Raw response (click to expand)</summary>
-                  <pre className="text-xs mt-1 p-2 bg-background rounded overflow-auto max-h-48 whitespace-pre-wrap">
-                    {results.pipelines.raw}
+              {results.pipelinesV2.raw && (
+                <details className="mt-2" open={!results.pipelinesV2.success}>
+                  <summary className="text-xs text-muted-foreground cursor-pointer font-medium">Raw response</summary>
+                  <pre className="text-xs mt-1 p-2 bg-background rounded overflow-auto max-h-32 whitespace-pre-wrap">
+                    {results.pipelinesV2.raw}
                   </pre>
                 </details>
               )}

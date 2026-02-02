@@ -10,11 +10,13 @@ export async function GET() {
       tokenLength?: number
     }
     opportunities: { success: boolean; count?: number; error?: string; raw?: string }
-    pipelines: { success: boolean; count?: number; error?: string; raw?: string }
+    legacyStages: { success: boolean; count?: number; error?: string; raw?: string }
+    pipelinesV2: { success: boolean; count?: number; error?: string; raw?: string }
   } = {
     cookies: { hasAccessToken: false, hasRefreshToken: false, allCookieNames: [] },
     opportunities: { success: false },
-    pipelines: { success: false }
+    legacyStages: { success: false },
+    pipelinesV2: { success: false }
   }
 
   try {
@@ -23,15 +25,7 @@ export async function GET() {
     const refreshToken = cookieStore.get("keap_refresh_token")
     const allCookies = cookieStore.getAll()
 
-    // Log everything for debugging
-    console.log("[Test API] ========== COOKIE DEBUG ==========")
-    console.log("[Test API] All cookie names:", allCookies.map(c => c.name))
-    console.log("[Test API] All cookies count:", allCookies.length)
-    console.log("[Test API] Access token cookie exists:", !!accessToken)
-    console.log("[Test API] Access token value exists:", !!accessToken?.value)
-    console.log("[Test API] Access token length:", accessToken?.value?.length || 0)
-    console.log("[Test API] Refresh token exists:", !!refreshToken?.value)
-    console.log("[Test API] ========== END DEBUG ==========")
+    console.log("[Test API] ========== START ==========")
 
     results.cookies.hasAccessToken = !!accessToken?.value
     results.cookies.hasRefreshToken = !!refreshToken?.value
@@ -45,8 +39,8 @@ export async function GET() {
       })
     }
 
-    // Test Opportunities API (v1)
-    console.log("[Test API] Testing v1 Opportunities API...")
+    // Test 1: Opportunities API (v1)
+    console.log("[Test API] Testing Opportunities API...")
     try {
       const oppResponse = await fetch("https://api.infusionsoft.com/crm/rest/v1/opportunities?limit=5", {
         headers: { Authorization: `Bearer ${accessToken.value}` }
@@ -73,57 +67,67 @@ export async function GET() {
       }
     }
 
-    // Test Pipelines API - try v1 first (more likely to work), then v2
-    console.log("[Test API] Testing v1 Pipelines API (stage_pipeline)...")
-    let v1PipelinesWorked = false
+    // Test 2: Legacy Opportunity Stages (v1) - NOT actual pipelines!
+    console.log("[Test API] Testing Legacy Stages API (v1)...")
     try {
-      const v1PipeResponse = await fetch("https://api.infusionsoft.com/crm/rest/v1/opportunity/stage_pipeline", {
+      const stagesResponse = await fetch("https://api.infusionsoft.com/crm/rest/v1/opportunity/stage_pipeline", {
         headers: { Authorization: `Bearer ${accessToken.value}` }
       })
-      const v1PipeText = await v1PipeResponse.text()
+      const stagesText = await stagesResponse.text()
       
-      if (v1PipeResponse.ok) {
-        v1PipelinesWorked = true
-        results.pipelines = {
+      if (stagesResponse.ok) {
+        const stagesData = JSON.parse(stagesText)
+        results.legacyStages = {
           success: true,
-          count: JSON.parse(v1PipeText)?.length || 0,
-          raw: `[v1 API] ${v1PipeText.substring(0, 400)}`
+          count: Array.isArray(stagesData) ? stagesData.length : 0,
+          raw: stagesText.substring(0, 400)
+        }
+      } else {
+        results.legacyStages = {
+          success: false,
+          error: `${stagesResponse.status}: ${stagesText.substring(0, 200)}`
         }
       }
     } catch (err) {
-      console.log("[Test API] v1 pipelines failed:", err)
-    }
-
-    // Only try v2 if v1 didn't work
-    if (!v1PipelinesWorked) {
-      console.log("[Test API] Testing v2 Pipelines API...")
-      try {
-        const pipeResponse = await fetch("https://slaapi.keapapis.com/v2/pipelines?page_size=5", {
-          headers: { Authorization: `Bearer ${accessToken.value}` }
-        })
-        const pipeText = await pipeResponse.text()
-        
-        if (pipeResponse.ok) {
-          const pipeData = JSON.parse(pipeText)
-          results.pipelines = {
-            success: true,
-            count: pipeData.pipelines?.length || 0,
-            raw: `[v2 API] ${pipeText.substring(0, 400)}`
-          }
-        } else {
-          results.pipelines = {
-            success: false,
-            error: `v2: ${pipeResponse.status} (v1 also failed). v2 may need additional Keap app permissions.`
-          }
-        }
-      } catch (err) {
-        results.pipelines = {
-          success: false,
-          error: err instanceof Error ? err.message : "Unknown error"
-        }
+      results.legacyStages = {
+        success: false,
+        error: err instanceof Error ? err.message : "Unknown error"
       }
     }
 
+    // Test 3: NEW Pipelines API (v2) - This is what we need for actual pipelines
+    console.log("[Test API] Testing Pipelines v2 API...")
+    try {
+      const pipeResponse = await fetch("https://slaapi.keapapis.com/v2/pipelines?page_size=10", {
+        headers: { Authorization: `Bearer ${accessToken.value}` }
+      })
+      const pipeText = await pipeResponse.text()
+      
+      console.log("[Test API] v2 Pipelines status:", pipeResponse.status)
+      console.log("[Test API] v2 Pipelines response:", pipeText.substring(0, 200))
+      
+      if (pipeResponse.ok) {
+        const pipeData = JSON.parse(pipeText)
+        results.pipelinesV2 = {
+          success: true,
+          count: pipeData.pipelines?.length || 0,
+          raw: pipeText.substring(0, 400)
+        }
+      } else {
+        results.pipelinesV2 = {
+          success: false,
+          error: `${pipeResponse.status}: ${pipeText.substring(0, 300)}`,
+          raw: pipeText.substring(0, 400)
+        }
+      }
+    } catch (err) {
+      results.pipelinesV2 = {
+        success: false,
+        error: err instanceof Error ? err.message : "Unknown error"
+      }
+    }
+
+    console.log("[Test API] ========== END ==========")
     return NextResponse.json(results)
   } catch (error) {
     return NextResponse.json({
