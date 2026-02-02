@@ -1,4 +1,4 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { type NextRequest } from "next/server"
 
 // Helper to get origin from request headers
 function getOrigin(request: NextRequest): string {
@@ -19,6 +19,19 @@ function getOrigin(request: NextRequest): string {
     || "https://v0-opps2pipelines.vercel.app"
 }
 
+// Build a Set-Cookie header value
+function buildCookie(name: string, value: string, maxAge: number): string {
+  const parts = [
+    `${name}=${value}`,
+    `Path=/`,
+    `HttpOnly`,
+    `Secure`,
+    `SameSite=Lax`,
+    `Max-Age=${maxAge}`
+  ]
+  return parts.join("; ")
+}
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const code = searchParams.get("code")
@@ -26,7 +39,7 @@ export async function GET(request: NextRequest) {
   const errorDescription = searchParams.get("error_description")
   const origin = getOrigin(request)
 
-  console.log("[Keap OAuth Callback] Processing callback")
+  console.log("[Keap OAuth Callback] ========== START ==========")
   console.log("[Keap OAuth Callback] Origin:", origin)
   console.log("[Keap OAuth Callback] Code received:", code ? "Yes" : "No")
   
@@ -34,25 +47,23 @@ export async function GET(request: NextRequest) {
   if (error) {
     console.error("[Keap OAuth Callback] Error from Keap:", error, errorDescription)
     const errorMsg = errorDescription || error
-    return NextResponse.redirect(`${origin}/auth/error?message=${encodeURIComponent(errorMsg)}`)
+    return Response.redirect(`${origin}/auth/error?message=${encodeURIComponent(errorMsg)}`)
   }
 
   if (!code) {
     console.error("[Keap OAuth Callback] No code received")
-    return NextResponse.redirect(`${origin}/auth/error?message=${encodeURIComponent("No authorization code received")}`)
+    return Response.redirect(`${origin}/auth/error?message=${encodeURIComponent("No authorization code received")}`)
   }
 
   const clientId = process.env.KEAP_CLIENT_ID
   const clientSecret = process.env.KEAP_CLIENT_SECRET
-  
-  // Build redirect URI - MUST match what was sent in the initial auth request
   const redirectUri = process.env.KEAP_REDIRECT_URI || `${origin}/api/auth/keap/callback`
 
-  console.log("[Keap OAuth Callback] Redirect URI for token exchange:", redirectUri)
+  console.log("[Keap OAuth Callback] Redirect URI:", redirectUri)
 
   if (!clientId || !clientSecret) {
     console.error("[Keap OAuth Callback] Missing credentials")
-    return NextResponse.redirect(`${origin}/auth/error?message=${encodeURIComponent("Server configuration error: Missing Keap credentials")}`)
+    return Response.redirect(`${origin}/auth/error?message=${encodeURIComponent("Server configuration error")}`)
   }
 
   try {
@@ -87,49 +98,52 @@ export async function GET(request: NextRequest) {
         if (responseText) errorMsg = responseText.substring(0, 200)
       }
       
-      return NextResponse.redirect(`${origin}/auth/error?message=${encodeURIComponent(errorMsg)}`)
+      return Response.redirect(`${origin}/auth/error?message=${encodeURIComponent(errorMsg)}`)
     }
 
     const tokenData = JSON.parse(responseText)
-
-    console.log("[Keap OAuth Callback] Token received! Expires in:", tokenData.expires_in, "seconds")
-
-    // Create redirect response with cookies
-    const dashboardUrl = new URL("/dashboard", origin)
-    dashboardUrl.searchParams.set("auth", "success")
     
-    const response = NextResponse.redirect(dashboardUrl.toString())
+    console.log("[Keap OAuth Callback] ✓ Token received!")
+    console.log("[Keap OAuth Callback] Token type:", tokenData.token_type)
+    console.log("[Keap OAuth Callback] Expires in:", tokenData.expires_in, "seconds")
+    console.log("[Keap OAuth Callback] Has refresh token:", !!tokenData.refresh_token)
+    console.log("[Keap OAuth Callback] Access token length:", tokenData.access_token?.length)
 
-    // Set access token cookie - be explicit about all options
-    response.cookies.set({
-      name: "keap_access_token",
-      value: tokenData.access_token,
-      httpOnly: true,
-      secure: true, // Always secure for production
-      sameSite: "lax",
-      maxAge: tokenData.expires_in || 86400,
-      path: "/",
-    })
-
-    // Set refresh token cookie
+    // Build Set-Cookie headers manually (more reliable than NextResponse.cookies)
+    const cookies: string[] = []
+    
+    // Access token cookie
+    cookies.push(buildCookie(
+      "keap_access_token",
+      tokenData.access_token,
+      tokenData.expires_in || 86400
+    ))
+    
+    // Refresh token cookie (if present)
     if (tokenData.refresh_token) {
-      response.cookies.set({
-        name: "keap_refresh_token",
-        value: tokenData.refresh_token,
-        httpOnly: true,
-        secure: true,
-        sameSite: "lax",
-        maxAge: 60 * 60 * 24 * 30, // 30 days
-        path: "/",
-      })
+      cookies.push(buildCookie(
+        "keap_refresh_token",
+        tokenData.refresh_token,
+        60 * 60 * 24 * 30 // 30 days
+      ))
     }
 
-    console.log("[Keap OAuth Callback] Cookies set, redirecting to dashboard")
-    return response
+    console.log("[Keap OAuth Callback] Setting", cookies.length, "cookies")
+    console.log("[Keap OAuth Callback] Redirecting to dashboard...")
+    console.log("[Keap OAuth Callback] ========== END ==========")
+
+    // Use native Response with multiple Set-Cookie headers
+    return new Response(null, {
+      status: 302,
+      headers: [
+        ["Location", `${origin}/dashboard?auth=success`],
+        ...cookies.map(cookie => ["Set-Cookie", cookie] as [string, string])
+      ]
+    })
 
   } catch (err) {
     console.error("[Keap OAuth Callback] Exception:", err)
     const errorMsg = err instanceof Error ? err.message : "Authentication failed"
-    return NextResponse.redirect(`${origin}/auth/error?message=${encodeURIComponent(errorMsg)}`)
+    return Response.redirect(`${origin}/auth/error?message=${encodeURIComponent(errorMsg)}`)
   }
 }
