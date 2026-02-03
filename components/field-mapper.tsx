@@ -54,21 +54,35 @@ const STANDARD_DEAL_FIELDS: DealField[] = [
   { name: "name", label: "Deal Name", type: "TEXT", isCustom: false },
   { name: "value.amount", label: "Value (Amount)", type: "NUMBER", isCustom: false },
   { name: "value.currency", label: "Value (Currency)", type: "TEXT", isCustom: false },
-  { name: "stage_id", label: "Stage ID", type: "REF", isCustom: false },
   { name: "contacts.id", label: "Primary Contact", type: "REF", isCustom: false },
   { name: "owner_id", label: "Deal Owner", type: "REF", isCustom: false },
   { name: "estimated_close_time", label: "Estimated Close", type: "DATETIME", isCustom: false },
   { name: "status", label: "Status", type: "TEXT", isCustom: false },
 ]
 
+// Special mapping targets that require different handling
+const SPECIAL_DEAL_FIELDS: DealField[] = [
+  { name: "_deal_notes", label: "Add as Deal Note", type: "LONG_TEXT", isCustom: false },
+  { name: "_stage_mapping", label: "Map to Pipeline Stage", type: "STAGE", isCustom: false },
+]
+
 // Descriptions for standard fields to explain what they do
 const FIELD_DESCRIPTIONS: Record<string, string> = {
   "contacts.id": "Links contact by ID, displays name",
   "owner_id": "Links user by ID, displays name",
-  "stage_id": "Maps to selected pipeline stage",
   "value.amount": "Numeric value only",
   "value.currency": "e.g., USD",
+  "_deal_notes": "Creates note via /v2/deals/{id}/notes API",
+  "_stage_mapping": "Select pipeline & stage below",
 }
+
+// Fields to hide from source list (not useful for migration)
+const HIDDEN_SOURCE_FIELDS = [
+  "id",                    // Opportunity ID - not needed
+  "affiliate_id",          // Internal
+  "stage.id",              // Use stage.name with pipeline mapping instead
+  "stage.details.check_list_items",
+]
 
 // Default mappings - opportunity field → deal field
 const DEFAULT_MAPPINGS: Record<string, string> = {
@@ -77,6 +91,9 @@ const DEFAULT_MAPPINGS: Record<string, string> = {
   "contact.id": "contacts.id",           // Contact ID → Primary Contact
   "user.id": "owner_id",                  // User ID → Deal Owner
   "estimated_close_date": "estimated_close_time",
+  "stage.name": "_stage_mapping",         // Stage name → Pipeline stage selector
+  "opportunity_notes": "_deal_notes",     // Notes → Deal notes API
+  "next_action_notes": "_deal_notes",     // Next action notes → Deal notes API
 }
 
 interface FieldMapperProps {
@@ -169,9 +186,9 @@ export function FieldMapper({ opportunities }: FieldMapperProps) {
       processObject(opp, '', '')
     })
     
-    // Sort by count (most common first) and filter out some noise
+    // Sort by count (most common first) and filter out hidden/noise fields
     return Array.from(fieldMap.values())
-      .filter(f => !f.path.startsWith('stage.details.check_list_items'))
+      .filter(f => !HIDDEN_SOURCE_FIELDS.some(hidden => f.path === hidden || f.path.startsWith(hidden + '.')))
       .sort((a, b) => b.count - a.count)
   }, [opportunities])
 
@@ -215,9 +232,9 @@ export function FieldMapper({ opportunities }: FieldMapperProps) {
     loadCustomFields()
   }, [discoveredFields])
 
-  // All available deal fields
+  // All available deal fields (standard + special + custom)
   const allDealFields = useMemo(() => {
-    return [...STANDARD_DEAL_FIELDS, ...customFields]
+    return [...STANDARD_DEAL_FIELDS, ...SPECIAL_DEAL_FIELDS, ...customFields]
   }, [customFields])
 
   // Update a mapping
@@ -420,11 +437,13 @@ export function FieldMapper({ opportunities }: FieldMapperProps) {
                             <SelectContent 
                               position="popper" 
                               sideOffset={4}
-                              className="max-h-[300px] overflow-y-auto z-50"
+                              className="max-h-[350px] overflow-y-auto z-50"
                             >
                               <SelectItem value="unmapped">
                                 <span className="text-muted-foreground">— Not mapped —</span>
                               </SelectItem>
+                              
+                              {/* Standard Deal Fields */}
                               <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground bg-muted/50">
                                 Standard Deal Fields
                               </div>
@@ -443,9 +462,31 @@ export function FieldMapper({ opportunities }: FieldMapperProps) {
                                   </div>
                                 </SelectItem>
                               ))}
+                              
+                              {/* Special Mappings */}
+                              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground bg-blue-50 border-t mt-1">
+                                ✨ Special Mappings
+                              </div>
+                              {SPECIAL_DEAL_FIELDS.map(df => (
+                                <SelectItem key={df.name} value={df.name}>
+                                  <div className="flex flex-col">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-blue-700">{df.label}</span>
+                                      <Badge variant="outline" className="text-[9px] bg-blue-50">{df.type}</Badge>
+                                    </div>
+                                    {FIELD_DESCRIPTIONS[df.name] && (
+                                      <span className="text-[10px] text-muted-foreground">
+                                        {FIELD_DESCRIPTIONS[df.name]}
+                                      </span>
+                                    )}
+                                  </div>
+                                </SelectItem>
+                              ))}
+                              
+                              {/* Custom Fields */}
                               {customFields.length > 0 && (
                                 <>
-                                  <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground bg-muted/50 border-t mt-1">
+                                  <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground bg-green-50 border-t mt-1">
                                     Custom Fields
                                   </div>
                                   {customFields.map(df => (
