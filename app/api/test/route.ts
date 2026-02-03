@@ -95,10 +95,10 @@ export async function GET() {
       }
     }
 
-    // Test 3: NEW Pipelines API (v2) - This is what we need for actual pipelines
-    console.log("[Test API] Testing Pipelines v2 API...")
+    // Test 3: NEW Pipelines API (v2) - Correct URL: /services/v2/
+    console.log("[Test API] Testing Pipelines v2 API (/services/v2/)...")
     try {
-      const pipeResponse = await fetch("https://slaapi.keapapis.com/v2/pipelines?page_size=10", {
+      const pipeResponse = await fetch("https://api.infusionsoft.com/services/v2/pipelines/", {
         headers: { Authorization: `Bearer ${accessToken.value}` }
       })
       const pipeText = await pipeResponse.text()

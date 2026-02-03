@@ -91,8 +91,8 @@ export class KeapClient {
   private accessToken: string
   // Legacy API for opportunities
   private legacyBaseUrl = "https://api.infusionsoft.com/crm/rest/v1"
-  // New Pipelines API
-  private pipelinesBaseUrl = "https://slaapi.keapapis.com/v2"
+  // New v2 Pipelines API - CORRECT URL: /services/v2/ (not slaapi.keapapis.com!)
+  private pipelinesBaseUrl = "https://api.infusionsoft.com/services/v2"
 
   constructor(accessToken: string) {
     this.accessToken = accessToken
