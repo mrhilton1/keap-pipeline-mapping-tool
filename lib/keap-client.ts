@@ -86,6 +86,38 @@ export interface CreateDealRequest {
   contact_id?: string
   value?: number
   currency?: string
+  custom_fields?: Record<string, any>
+}
+
+// Custom Field Types
+export interface KeapCustomField {
+  id: string
+  name: string
+  label: string
+  description: string
+  type: {
+    discriminator: "SIMPLE" | "ARRAY" | "REF"
+    primitive_type: string
+    array?: any
+    ref?: any
+  }
+  validators: any[]
+  options?: any
+  helper_text?: string
+  default_value?: any
+  display_options?: any
+}
+
+export interface KeapCustomFieldsResponse {
+  next_page_token?: string
+  custom_fields: KeapCustomField[]
+}
+
+export interface CreateCustomFieldRequest {
+  name: string
+  label: string
+  description: string
+  primitiveType: string  // TEXT, INTEGER, NUMBER, BOOLEAN, etc.
 }
 
 export class KeapClient {
@@ -284,6 +316,44 @@ export class KeapClient {
       this.pipelinesBaseUrl,
       `/stages/${stageId}/deals`,
       { method: "GET" }
+    )
+  }
+
+  // ============ Custom Fields API Methods ============
+
+  async getCustomFields(pageSize = 100): Promise<KeapCustomFieldsResponse> {
+    return this.request<KeapCustomFieldsResponse>(
+      this.pipelinesBaseUrl,
+      `/customFields/?page_size=${pageSize}`,
+      { method: "GET" }
+    )
+  }
+
+  async createCustomField(data: CreateCustomFieldRequest): Promise<KeapCustomField> {
+    return this.request<KeapCustomField>(
+      this.pipelinesBaseUrl,
+      "/customFields/",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          name: data.name,
+          label: data.label,
+          description: data.description,
+          type: {
+            discriminator: "SIMPLE",
+            primitive_type: data.primitiveType
+          },
+          validators: []
+        })
+      }
+    )
+  }
+
+  async deleteCustomField(fieldId: string): Promise<void> {
+    return this.request<void>(
+      this.pipelinesBaseUrl,
+      `/customFields/${fieldId}`,
+      { method: "DELETE" }
     )
   }
 }

@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 import { OpportunitiesPanel, Opportunity } from "./opportunities-panel"
 import { PipelineBuilder, PipelineSuggestion } from "./pipeline-builder"
+import { FieldMapper } from "./field-mapper"
 import { useToast } from "@/hooks/use-toast"
 
 interface Pipeline {
@@ -380,8 +381,9 @@ export function MigrationDashboard() {
         <Card className="h-[700px] flex flex-col">
           <CardHeader className="flex-shrink-0 pb-2">
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid w-full grid-cols-2">
+              <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="build">Build Pipelines</TabsTrigger>
+                <TabsTrigger value="fields">Field Mapping</TabsTrigger>
                 <TabsTrigger value="migrate">Migrate Deals</TabsTrigger>
               </TabsList>
             </Tabs>
@@ -416,6 +418,13 @@ export function MigrationDashboard() {
                     onCreatePipelines={createPipelines}
                     isCreating={creating}
                   />
+                </div>
+              </TabsContent>
+
+              <TabsContent value="fields" className="mt-0 flex-1 overflow-auto">
+                <div className="text-center py-8 text-muted-foreground">
+                  <p>See the Field Mapping section below for full configuration.</p>
+                  <p className="text-sm mt-2">Map opportunity fields to deal custom fields before migration.</p>
                 </div>
               </TabsContent>
 
@@ -498,6 +507,13 @@ export function MigrationDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Field Mapping Section - Full Width */}
+      {activeTab === "fields" && (
+        <div className="mt-6">
+          <FieldMapper />
+        </div>
+      )}
     </div>
   )
 }
