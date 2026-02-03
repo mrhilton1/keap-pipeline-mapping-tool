@@ -85,6 +85,7 @@ const FIELD_TYPES = [
 const STANDARD_DEAL_FIELDS: DealField[] = [
   { name: "name", label: "Deal Name", type: "TEXT", isCustom: false },
   { name: "value.amount", label: "Value (Amount)", type: "NUMBER", isCustom: false },
+  { name: "value.average", label: "Value (Average)", type: "NUMBER", isCustom: false }, // Special: averages low & high
   { name: "value.currency", label: "Value (Currency)", type: "TEXT", isCustom: false },
   { name: "contacts.id", label: "Primary Contact (1:1)", type: "REF", isCustom: false },
   { name: "owner_id", label: "Keep Original Owner (1:1)", type: "REF", isCustom: false },
@@ -104,6 +105,7 @@ const FIELD_DESCRIPTIONS: Record<string, string> = {
   "contacts.id": "Each deal gets its own contact (by ID)",
   "owner_id": "Each deal keeps its original owner",
   "value.amount": "Numeric value only",
+  "value.average": "Averages Low & High revenue (auto-links both fields)",
   "value.currency": "e.g., USD",
   "_deal_notes": "Creates note via /v2/deals/{id}/notes API",
   "_stage_mapping": "Assign ALL deals to same pipeline/stage",
@@ -116,6 +118,9 @@ const HIDDEN_SOURCE_FIELDS = [
   "affiliate_id",          // Internal
   "stage.id",              // Use stage.name with pipeline mapping instead
   "stage.details.check_list_items",
+  "stage.details.stage_order", // Not needed for migration
+  "stage.details.probability",
+  "stage.details.target_num_days",
   // User fields - use user.id with owner mapping instead
   "user.first_name",
   "user.last_name",
@@ -128,10 +133,14 @@ const HIDDEN_SOURCE_FIELDS = [
   "contact.job_title",
 ]
 
+// Revenue fields that can be averaged
+const REVENUE_FIELDS = ["projected_revenue_low", "projected_revenue_high"]
+
 // Default mappings - opportunity field → deal field
 const DEFAULT_MAPPINGS: Record<string, string> = {
   "opportunity_title": "name",
-  "projected_revenue_high": "value.amount",
+  "projected_revenue_high": "value.average",  // Both revenue fields → average
+  "projected_revenue_low": "value.average",   // Both revenue fields → average
   "contact.id": "contacts.id",           // Contact ID → Primary Contact
   "user.id": "_owner_mapping",           // User ID → Select Deal Owner from list
   "estimated_close_date": "estimated_close_time",
@@ -355,14 +364,52 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, savedConf
     return [...STANDARD_DEAL_FIELDS, ...SPECIAL_DEAL_FIELDS, ...customFields]
   }, [customFields])
 
-  // Update a mapping
+  // Update a mapping with special handling for revenue fields
   const updateMapping = (sourceField: string, targetField: string | null) => {
     setMappings(prev => {
-      const existing = prev.find(m => m.sourceField === sourceField)
-      if (existing) {
-        return prev.map(m => m.sourceField === sourceField ? { ...m, targetField } : m)
+      let newMappings = [...prev]
+      
+      // Find or create the mapping for this source field
+      const existingIndex = newMappings.findIndex(m => m.sourceField === sourceField)
+      if (existingIndex >= 0) {
+        newMappings[existingIndex] = { ...newMappings[existingIndex], targetField }
+      } else {
+        newMappings.push({ sourceField, targetField })
       }
-      return [...prev, { sourceField, targetField }]
+      
+      // Special handling for revenue fields
+      const isRevenueField = REVENUE_FIELDS.includes(sourceField)
+      const otherRevenueField = sourceField === "projected_revenue_low" 
+        ? "projected_revenue_high" 
+        : "projected_revenue_low"
+      
+      if (isRevenueField && targetField) {
+        // Case 1: Mapping to value.average - auto-link the other revenue field
+        if (targetField === "value.average") {
+          const otherIndex = newMappings.findIndex(m => m.sourceField === otherRevenueField)
+          if (otherIndex >= 0) {
+            newMappings[otherIndex] = { ...newMappings[otherIndex], targetField: "value.average" }
+          } else {
+            newMappings.push({ sourceField: otherRevenueField, targetField: "value.average" })
+          }
+        }
+        
+        // Case 2: Mapping to value.amount - check if other is also value.amount
+        if (targetField === "value.amount") {
+          const otherMapping = newMappings.find(m => m.sourceField === otherRevenueField)
+          if (otherMapping?.targetField === "value.amount") {
+            // Both mapped to value.amount - auto-change both to value.average
+            newMappings = newMappings.map(m => {
+              if (REVENUE_FIELDS.includes(m.sourceField) && m.targetField === "value.amount") {
+                return { ...m, targetField: "value.average" }
+              }
+              return m
+            })
+          }
+        }
+      }
+      
+      return newMappings
     })
   }
 
