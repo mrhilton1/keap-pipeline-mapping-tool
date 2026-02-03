@@ -81,12 +81,21 @@ export async function POST(request: Request) {
 
     console.log("[Deals API] Deal created:", deal.id)
     return NextResponse.json(deal)
-  } catch (error) {
+  } catch (error: any) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error"
     console.error("[Deals API] Error creating deal:", errorMessage)
+    console.error("[Deals API] Full error:", JSON.stringify(error, null, 2))
+    
+    // Try to extract more details from the error
+    let details = errorMessage
+    if (error?.response) {
+      details = JSON.stringify(error.response)
+    }
+    
     return NextResponse.json({ 
       error: "Failed to create deal",
-      details: errorMessage 
+      details: details,
+      raw: String(error)
     }, { status: 500 })
   }
 }

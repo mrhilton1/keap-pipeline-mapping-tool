@@ -772,7 +772,7 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, savedConf
                                 <SelectTrigger className="h-8 text-xs bg-white">
                                   <SelectValue placeholder="Select owner..." />
                                 </SelectTrigger>
-                                <SelectContent position="popper" className="max-h-[200px]">
+                                <SelectContent position="popper" className="max-h-[250px] w-[280px]">
                                   {users.length === 0 ? (
                                     <div className="px-2 py-2 text-center text-xs text-muted-foreground">
                                       No users found
@@ -782,7 +782,10 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, savedConf
                                       const fullName = `${user.given_name || ''} ${user.family_name || ''}`.trim()
                                       return (
                                         <SelectItem key={user.id} value={user.id.toString()} className="text-xs">
-                                          {fullName || user.email_address || 'No name'}
+                                          <div className="flex flex-col">
+                                            <span className="font-medium">{fullName || 'No name'}</span>
+                                            <span className="text-[10px] text-muted-foreground">{user.email_address || `ID: ${user.id}`}</span>
+                                          </div>
                                         </SelectItem>
                                       )
                                     })
