@@ -961,6 +961,35 @@ export function MigrationDashboard() {
               {/* Show choice if there are existing pipelines and user hasn't chosen yet */}
               {pipelines.length > 0 && pipelineMode === null ? (
                 <div className="max-w-md mx-auto py-8 space-y-6">
+                  {/* Build New Pipelines */}
+                  <Card 
+                    className="cursor-pointer hover:border-primary hover:shadow-md transition-all"
+                    onClick={() => setPipelineMode("build")}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center flex-shrink-0">
+                          <Hammer className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-medium text-sm">Build New Pipeline</h4>
+                          <p className="text-xs text-muted-foreground">{availableStages.length} stages from opportunities</p>
+                        </div>
+                        <ArrowRight className="w-4 h-4 text-muted-foreground" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  {/* Divider */}
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t" />
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-background px-2 text-muted-foreground">or</span>
+                    </div>
+                  </div>
+                  
                   {/* Use Existing Pipeline - with dropdown */}
                   <Card className="overflow-hidden">
                     <CardContent className="p-4">
@@ -1007,35 +1036,6 @@ export function MigrationDashboard() {
                           <ArrowRight className="w-4 h-4 ml-2" />
                         </Button>
                       )}
-                    </CardContent>
-                  </Card>
-                  
-                  {/* Divider */}
-                  <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                      <span className="w-full border-t" />
-                    </div>
-                    <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-background px-2 text-muted-foreground">or</span>
-                    </div>
-                  </div>
-                  
-                  {/* Build New Pipelines */}
-                  <Card 
-                    className="cursor-pointer hover:border-primary hover:shadow-md transition-all"
-                    onClick={() => setPipelineMode("build")}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center flex-shrink-0">
-                          <Hammer className="w-4 h-4" />
-                        </div>
-                        <div className="flex-1">
-                          <h4 className="font-medium text-sm">Build New Pipeline</h4>
-                          <p className="text-xs text-muted-foreground">{availableStages.length} stages from opportunities</p>
-                        </div>
-                        <ArrowRight className="w-4 h-4 text-muted-foreground" />
-                      </div>
                     </CardContent>
                   </Card>
                 </div>
