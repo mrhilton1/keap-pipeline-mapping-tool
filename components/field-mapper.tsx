@@ -86,8 +86,8 @@ const STANDARD_DEAL_FIELDS: DealField[] = [
   { name: "name", label: "Deal Name", type: "TEXT", isCustom: false },
   { name: "value.amount", label: "Value (Amount)", type: "NUMBER", isCustom: false },
   { name: "value.currency", label: "Value (Currency)", type: "TEXT", isCustom: false },
-  { name: "contacts.id", label: "Primary Contact", type: "REF", isCustom: false },
-  { name: "owner_id", label: "Deal Owner", type: "REF", isCustom: false },
+  { name: "contacts.id", label: "Primary Contact (1:1)", type: "REF", isCustom: false },
+  { name: "owner_id", label: "Keep Original Owner (1:1)", type: "REF", isCustom: false },
   { name: "estimated_close_time", label: "Estimated Close", type: "DATETIME", isCustom: false },
   { name: "status", label: "Status", type: "TEXT", isCustom: false },
 ]
@@ -95,19 +95,19 @@ const STANDARD_DEAL_FIELDS: DealField[] = [
 // Special mapping targets that require different handling
 const SPECIAL_DEAL_FIELDS: DealField[] = [
   { name: "_deal_notes", label: "Add as Deal Note", type: "LONG_TEXT", isCustom: false },
-  { name: "_stage_mapping", label: "Map to Pipeline Stage", type: "STAGE", isCustom: false },
-  { name: "_owner_mapping", label: "Select Deal Owner", type: "USER", isCustom: false },
+  { name: "_stage_mapping", label: "Assign ALL to Pipeline/Stage", type: "STAGE", isCustom: false },
+  { name: "_owner_mapping", label: "Assign ALL to Same Owner", type: "USER", isCustom: false },
 ]
 
 // Descriptions for standard fields to explain what they do
 const FIELD_DESCRIPTIONS: Record<string, string> = {
-  "contacts.id": "Links contact by ID, displays name",
-  "owner_id": "Pass user ID directly from source",
+  "contacts.id": "Each deal gets its own contact (by ID)",
+  "owner_id": "Each deal keeps its original owner",
   "value.amount": "Numeric value only",
   "value.currency": "e.g., USD",
   "_deal_notes": "Creates note via /v2/deals/{id}/notes API",
-  "_stage_mapping": "Select pipeline & stage below",
-  "_owner_mapping": "Select a specific user from your team",
+  "_stage_mapping": "Assign ALL deals to same pipeline/stage",
+  "_owner_mapping": "Assign ALL deals to same owner",
 }
 
 // Fields to hide from source list (not useful for migration)
@@ -140,21 +140,32 @@ const DEFAULT_MAPPINGS: Record<string, string> = {
   "next_action_notes": "_deal_notes",     // Next action notes → Deal notes API
 }
 
+// Exported types for parent state management
+export interface FieldMappingConfig {
+  mappings: FieldMapping[]
+  stageMapping: StageMapping
+  ownerMapping: OwnerMapping
+}
+
 interface FieldMapperProps {
   opportunities: Opportunity[]
   pipelines?: Pipeline[]
+  // Optional: pass in saved config to persist across tab switches
+  savedConfig?: FieldMappingConfig | null
+  onConfigChange?: (config: FieldMappingConfig) => void
 }
 
-export function FieldMapper({ opportunities, pipelines: propPipelines }: FieldMapperProps) {
+export function FieldMapper({ opportunities, pipelines: propPipelines, savedConfig, onConfigChange }: FieldMapperProps) {
   const [customFields, setCustomFields] = useState<DealField[]>([])
-  const [mappings, setMappings] = useState<FieldMapping[]>([])
+  const [mappings, setMappings] = useState<FieldMapping[]>(savedConfig?.mappings || [])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [configLoaded, setConfigLoaded] = useState(false)
   
   // Pipelines for stage mapping
   const [pipelines, setPipelines] = useState<Pipeline[]>(propPipelines || [])
-  const [stageMapping, setStageMapping] = useState<StageMapping>({
+  const [stageMapping, setStageMappingState] = useState<StageMapping>(savedConfig?.stageMapping || {
     pipelineId: null,
     pipelineName: null,
     stageId: null,
@@ -163,10 +174,33 @@ export function FieldMapper({ opportunities, pipelines: propPipelines }: FieldMa
   
   // Users for owner mapping
   const [users, setUsers] = useState<KeapUser[]>([])
-  const [ownerMapping, setOwnerMapping] = useState<OwnerMapping>({
+  const [ownerMapping, setOwnerMappingState] = useState<OwnerMapping>(savedConfig?.ownerMapping || {
     userId: null,
     userName: null
   })
+
+  // Wrapper to notify parent of stage mapping changes
+  const setStageMapping = (value: StageMapping | ((prev: StageMapping) => StageMapping)) => {
+    setStageMappingState(prev => {
+      const newVal = typeof value === 'function' ? value(prev) : value
+      return newVal
+    })
+  }
+
+  // Wrapper to notify parent of owner mapping changes  
+  const setOwnerMapping = (value: OwnerMapping | ((prev: OwnerMapping) => OwnerMapping)) => {
+    setOwnerMappingState(prev => {
+      const newVal = typeof value === 'function' ? value(prev) : value
+      return newVal
+    })
+  }
+
+  // Notify parent of config changes
+  useEffect(() => {
+    if (configLoaded && onConfigChange) {
+      onConfigChange({ mappings, stageMapping, ownerMapping })
+    }
+  }, [mappings, stageMapping, ownerMapping, configLoaded, onConfigChange])
   
   // Create field dialog
   const [showCreateDialog, setShowCreateDialog] = useState(false)
@@ -294,12 +328,16 @@ export function FieldMapper({ opportunities, pipelines: propPipelines }: FieldMa
         setUsers(usersData.users)
       }
       
-      // Initialize mappings with defaults
-      const initialMappings = discoveredFields.map(df => ({
-        sourceField: df.path,
-        targetField: DEFAULT_MAPPINGS[df.path] || null
-      }))
-      setMappings(initialMappings)
+      // Initialize mappings with defaults (only if no saved config)
+      if (!savedConfig?.mappings?.length) {
+        const initialMappings = discoveredFields.map(df => ({
+          sourceField: df.path,
+          targetField: DEFAULT_MAPPINGS[df.path] || null
+        }))
+        setMappings(initialMappings)
+      }
+      
+      setConfigLoaded(true)
       
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load data")
@@ -468,11 +506,28 @@ export function FieldMapper({ opportunities, pipelines: propPipelines }: FieldMa
             {mappedCount} of {totalFields} fields mapped • Discovered from {opportunities.length} opportunities
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={loadCustomFields} disabled={loading}>
-          <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-3">
+          {configLoaded && (
+            <span className="text-xs text-green-600 flex items-center gap-1">
+              <Check className="w-3 h-3" />
+              Auto-saved
+            </span>
+          )}
+          <Button variant="outline" size="sm" onClick={loadCustomFields} disabled={loading}>
+            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+        </div>
       </div>
+      
+      {/* Info about special mappings */}
+      <Alert className="bg-blue-50/50 border-blue-200">
+        <AlertDescription className="text-sm">
+          <strong>Note:</strong> Most fields are mapped 1-to-1 (each deal gets its own value). 
+          For <strong>Stage</strong> and <strong>Owner</strong>, you can choose to assign ALL deals to the same destination, 
+          or use the original value from each opportunity.
+        </AlertDescription>
+      </Alert>
 
       {/* Mapping Table */}
       <Card>

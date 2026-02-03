@@ -16,7 +16,7 @@ import {
 } from "lucide-react"
 import { OpportunitiesPanel, Opportunity } from "./opportunities-panel"
 import { PipelineBuilder, PipelineSuggestion } from "./pipeline-builder"
-import { FieldMapper } from "./field-mapper"
+import { FieldMapper, FieldMappingConfig } from "./field-mapper"
 import { useToast } from "@/hooks/use-toast"
 
 interface Pipeline {
@@ -41,6 +41,9 @@ export function MigrationDashboard() {
   
   const [activeTab, setActiveTab] = useState("build")
   const [createdPipelines, setCreatedPipelines] = useState<Pipeline[]>([])
+  
+  // Field mapping config - persisted across tab switches
+  const [fieldMappingConfig, setFieldMappingConfig] = useState<FieldMappingConfig | null>(null)
   
   const { toast } = useToast()
   
@@ -514,7 +517,12 @@ export function MigrationDashboard() {
       {/* Field Mapping Section - Full Width */}
       {activeTab === "fields" && (
         <div className="mt-6">
-          <FieldMapper opportunities={opportunities} />
+          <FieldMapper 
+            opportunities={opportunities} 
+            pipelines={pipelines}
+            savedConfig={fieldMappingConfig}
+            onConfigChange={setFieldMappingConfig}
+          />
         </div>
       )}
     </div>
