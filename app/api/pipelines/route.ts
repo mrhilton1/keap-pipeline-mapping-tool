@@ -115,25 +115,24 @@ export async function POST(request: Request) {
       }, { status: 400 })
     }
 
-    console.log(`[Pipelines API] Creating pipeline: ${name}`)
+    console.log(`[Pipelines API] Creating pipeline: ${name} with ${stages?.length || 0} stages`)
     const client = new KeapClient(accessToken.value)
     
-    // Create pipeline using v2 API
-    const pipeline = await client.createPipeline({ name })
+    // v2 API creates pipeline and stages in one call
+    // stages must be array of strings (stage names)
+    const stageNames = stages && Array.isArray(stages) && stages.length > 0
+      ? stages
+      : ["Stage 1"]  // Default if none provided
+    
+    const pipeline = await client.createPipeline({ 
+      name, 
+      stages: stageNames 
+    })
     console.log("[Pipelines API] Pipeline created:", pipeline.id)
-
-    // Create stages if provided
-    let createdStages: Array<{ id: string; name: string; order?: number }> = []
-    if (stages && Array.isArray(stages) && stages.length > 0) {
-      console.log(`[Pipelines API] Creating ${stages.length} stages for pipeline ${pipeline.id}`)
-      const stagesResult = await client.bulkCreateStages(pipeline.id, stages)
-      createdStages = stagesResult.stages || []
-      console.log("[Pipelines API] Stages created:", createdStages.length)
-    }
 
     return NextResponse.json({
       ...pipeline,
-      stages: createdStages
+      stages: stageNames.map((name, i) => ({ name, order: i + 1 }))
     })
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error"

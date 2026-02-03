@@ -73,6 +73,7 @@ export interface KeapDealsResponse {
 
 export interface CreatePipelineRequest {
   name: string
+  stages: string[]  // Required! Array of stage names (at least 1)
 }
 
 export interface BulkCreateStagesRequest {
@@ -172,12 +173,20 @@ export class KeapClient {
   }
 
   async createPipeline(data: CreatePipelineRequest): Promise<KeapPipeline> {
+    // v2 API requires stages as array of strings (at least 1)
+    const stages = data.stages && data.stages.length > 0 
+      ? data.stages 
+      : ["Stage 1"]  // Default stage if none provided
+    
     return this.request<KeapPipeline>(
       this.pipelinesBaseUrl,
-      "/pipelines",
+      "/pipelines/",  // Note: trailing slash required
       { 
         method: "POST",
-        body: JSON.stringify({ name: data.name })
+        body: JSON.stringify({ 
+          name: data.name,
+          stages: stages
+        })
       }
     )
   }
