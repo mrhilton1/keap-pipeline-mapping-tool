@@ -118,7 +118,7 @@ export async function GET(request: NextRequest) {
     console.log("[Keap OAuth Callback] Cookie header:", accessTokenCookie.substring(0, 50) + "...")
     console.log("[Keap OAuth Callback] ========== END ==========")
 
-    // Return an HTML page that redirects via JavaScript
+    // Return an HTML page that handles both popup and redirect flows
     // This ensures the browser processes the Set-Cookie headers before navigation
     const html = `
 <!DOCTYPE html>
@@ -126,15 +126,60 @@ export async function GET(request: NextRequest) {
 <head>
   <meta charset="utf-8">
   <title>Authenticating...</title>
-  <meta http-equiv="refresh" content="0;url=${origin}/dashboard?auth=success">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    .container {
+      text-align: center;
+      padding: 2rem;
+    }
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 1rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    h2 { margin: 0 0 0.5rem; font-weight: 500; }
+    p { margin: 0; opacity: 0.9; font-size: 0.9rem; }
+  </style>
 </head>
 <body>
-  <p>Authentication successful! Redirecting...</p>
+  <div class="container">
+    <div class="spinner"></div>
+    <h2>Authentication Successful!</h2>
+    <p id="status">Completing setup...</p>
+  </div>
   <script>
-    // Backup redirect in case meta refresh doesn't work
-    setTimeout(function() {
-      window.location.href = "${origin}/dashboard?auth=success";
-    }, 100);
+    (function() {
+      // Check if this is a popup window
+      if (window.opener && !window.opener.closed) {
+        // Send success message to opener
+        window.opener.postMessage({ type: 'KEAP_AUTH_SUCCESS' }, '${origin}');
+        document.getElementById('status').textContent = 'You can close this window.';
+        // Close popup after a short delay
+        setTimeout(function() {
+          window.close();
+        }, 1500);
+      } else {
+        // Not a popup - redirect normally
+        document.getElementById('status').textContent = 'Redirecting to dashboard...';
+        setTimeout(function() {
+          window.location.href = "${origin}/dashboard?auth=success";
+        }, 100);
+      }
+    })();
   </script>
 </body>
 </html>`
