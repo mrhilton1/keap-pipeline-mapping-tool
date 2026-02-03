@@ -247,19 +247,38 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, initialPi
   
   // Pre-select pipeline if passed from parent (Use Existing flow)
   useEffect(() => {
-    if (initialPipeline && !stageMapping.pipelineId) {
+    if (initialPipeline && !stageMapping.pipelineId && opportunityStages.length > 0) {
       // Auto-select the pipeline and compute smart stage mapping
+      const pipelineStages = initialPipeline.stages || []
+      
+      // Compute auto-matched stages
+      const perStageMappings = opportunityStages.map(oppStage => {
+        const matchedStage = pipelineStages.find(
+          ps => ps.name.toLowerCase() === oppStage.name.toLowerCase()
+        )
+        return {
+          opportunityStageName: oppStage.name,
+          opportunityCount: oppStage.count,
+          targetStageId: matchedStage?.id || null,
+          targetStageName: matchedStage?.name || null,
+          isAutoMatched: !!matchedStage
+        }
+      })
+      
+      console.log("[FieldMapper] Pre-selecting pipeline:", initialPipeline.name)
+      console.log("[FieldMapper] Computed perStageMappings:", perStageMappings)
+      
       setStageMapping({
         pipelineId: initialPipeline.id,
         pipelineName: initialPipeline.name,
         stageId: null,
         stageName: null,
-        perStageMappings: [],
+        perStageMappings,
         fallbackStageId: null,
         fallbackStageName: null
       })
     }
-  }, [initialPipeline])
+  }, [initialPipeline, opportunityStages])
   
   // Create field dialog
   const [showCreateDialog, setShowCreateDialog] = useState(false)
