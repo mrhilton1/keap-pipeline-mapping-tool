@@ -958,54 +958,36 @@ export function MigrationDashboard() {
             <TabsContent value="build" className="mt-0">
               {/* Show choice if there are existing pipelines and user hasn't chosen yet */}
               {pipelines.length > 0 && pipelineMode === null ? (
-                <div className="py-8">
-                  <div className="text-center mb-8">
-                    <h3 className="text-xl font-semibold mb-2">How would you like to proceed?</h3>
-                    <p className="text-muted-foreground">
-                      You have {pipelines.length} existing pipeline{pipelines.length > 1 ? 's' : ''} in your Keap account.
-                    </p>
-                  </div>
-                  
-                  <div className="grid md:grid-cols-2 gap-6 max-w-2xl mx-auto">
+                <div className="flex items-center justify-center py-12">
+                  <div className="flex gap-4">
                     {/* Use Existing Pipelines */}
                     <Card 
-                      className="cursor-pointer hover:border-primary hover:bg-primary/5 transition-all group"
+                      className="cursor-pointer hover:border-primary hover:shadow-md transition-all w-48"
                       onClick={() => {
                         setPipelineMode("existing")
                         setActiveTab("migrate")
                       }}
                     >
-                      <CardContent className="pt-6 text-center">
-                        <div className="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mx-auto mb-4 group-hover:bg-blue-200 transition-colors">
-                          <FolderOpen className="w-6 h-6" />
+                      <CardContent className="pt-6 pb-4 text-center">
+                        <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mx-auto mb-3">
+                          <FolderOpen className="w-5 h-5" />
                         </div>
-                        <h4 className="font-semibold mb-2">Use Existing Pipelines</h4>
-                        <p className="text-sm text-muted-foreground mb-4">
-                          Migrate opportunities to one of your {pipelines.length} existing pipeline{pipelines.length > 1 ? 's' : ''}.
-                        </p>
-                        <Badge variant="secondary" className="mb-2">
-                          {pipelines.map(p => p.name).slice(0, 3).join(", ")}
-                          {pipelines.length > 3 ? ` +${pipelines.length - 3} more` : ""}
-                        </Badge>
+                        <h4 className="font-medium text-sm">Use Existing</h4>
+                        <p className="text-xs text-muted-foreground mt-1">{pipelines.length} pipelines</p>
                       </CardContent>
                     </Card>
                     
                     {/* Build New Pipelines */}
                     <Card 
-                      className="cursor-pointer hover:border-primary hover:bg-primary/5 transition-all group"
+                      className="cursor-pointer hover:border-primary hover:shadow-md transition-all w-48"
                       onClick={() => setPipelineMode("build")}
                     >
-                      <CardContent className="pt-6 text-center">
-                        <div className="w-12 h-12 rounded-full bg-green-100 text-green-600 flex items-center justify-center mx-auto mb-4 group-hover:bg-green-200 transition-colors">
-                          <Hammer className="w-6 h-6" />
+                      <CardContent className="pt-6 pb-4 text-center">
+                        <div className="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center mx-auto mb-3">
+                          <Hammer className="w-5 h-5" />
                         </div>
-                        <h4 className="font-semibold mb-2">Build New Pipelines</h4>
-                        <p className="text-sm text-muted-foreground mb-4">
-                          Create new pipelines from your opportunity stages and migrate to them.
-                        </p>
-                        <Badge variant="outline">
-                          {availableStages.length} unique stages found
-                        </Badge>
+                        <h4 className="font-medium text-sm">Build New</h4>
+                        <p className="text-xs text-muted-foreground mt-1">{availableStages.length} stages</p>
                       </CardContent>
                     </Card>
                   </div>
