@@ -49,13 +49,14 @@ const FIELD_TYPES = [
   { value: "URL", label: "URL" },
 ]
 
-// Standard deal fields
+// Standard deal fields (v2 API)
 const STANDARD_DEAL_FIELDS: DealField[] = [
   { name: "name", label: "Deal Name", type: "TEXT", isCustom: false },
   { name: "value", label: "Value (Amount)", type: "CURRENCY", isCustom: false },
   { name: "stage_id", label: "Stage", type: "REF", isCustom: false },
   { name: "contact_ids", label: "Contacts", type: "ARRAY", isCustom: false },
   { name: "estimated_close_time", label: "Estimated Close", type: "DATETIME", isCustom: false },
+  { name: "notes", label: "Deal Notes", type: "LONG_TEXT", isCustom: false },
 ]
 
 // Default mappings
@@ -404,26 +405,36 @@ export function FieldMapper({ opportunities }: FieldMapperProps) {
                                 )}
                               </SelectValue>
                             </SelectTrigger>
-                            <SelectContent>
+                            <SelectContent 
+                              position="popper" 
+                              sideOffset={4}
+                              className="max-h-[300px] overflow-y-auto z-50"
+                            >
                               <SelectItem value="unmapped">
                                 <span className="text-muted-foreground">— Not mapped —</span>
                               </SelectItem>
-                              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                                Standard Fields
+                              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground bg-muted/50">
+                                Standard Deal Fields
                               </div>
                               {STANDARD_DEAL_FIELDS.map(df => (
                                 <SelectItem key={df.name} value={df.name}>
-                                  {df.label}
+                                  <div className="flex items-center justify-between w-full gap-2">
+                                    <span>{df.label}</span>
+                                    <Badge variant="outline" className="text-[9px] ml-2">{df.type}</Badge>
+                                  </div>
                                 </SelectItem>
                               ))}
                               {customFields.length > 0 && (
                                 <>
-                                  <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground border-t mt-1 pt-2">
+                                  <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground bg-muted/50 border-t mt-1">
                                     Custom Fields
                                   </div>
                                   {customFields.map(df => (
                                     <SelectItem key={df.name} value={df.name}>
-                                      {df.label}
+                                      <div className="flex items-center justify-between w-full gap-2">
+                                        <span>{df.label}</span>
+                                        <Badge variant="secondary" className="text-[9px] ml-2">{df.type}</Badge>
+                                      </div>
                                     </SelectItem>
                                   ))}
                                 </>
