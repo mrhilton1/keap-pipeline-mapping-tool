@@ -98,6 +98,33 @@ export function StageSelector({
     }
   }
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault()
+      
+      // If there's a search term and it's a new stage (create option showing), create it
+      if (showCreateOption) {
+        handleCreate()
+      } 
+      // If there's exactly one filtered stage, select it
+      else if (filteredStages.length === 1) {
+        handleSelect(filteredStages[0].name)
+      }
+      // If search matches an existing stage exactly, select it
+      else if (search.trim() && exactMatch) {
+        const matchingStage = availableStages.find(
+          s => s.name.toLowerCase() === search.toLowerCase()
+        )
+        if (matchingStage) {
+          handleSelect(matchingStage.name)
+        }
+      }
+    } else if (e.key === "Escape") {
+      setOpen(false)
+      setSearch("")
+    }
+  }
+
   return (
     <div ref={containerRef} className={cn("relative", className)}>
       <div className="relative">
@@ -109,6 +136,7 @@ export function StageSelector({
             if (!open) setOpen(true)
           }}
           onFocus={() => setOpen(true)}
+          onKeyDown={handleKeyDown}
           placeholder={placeholder}
           className="h-7 pr-8"
         />
