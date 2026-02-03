@@ -110,12 +110,14 @@ export interface BulkCreateStagesRequest {
 export interface CreateDealRequest {
   name: string
   stage_id: string
-  contacts?: Array<{ id: string }>  // v2 API uses contacts array
-  owner_id?: number
-  value?: {
-    amount?: number
-    currency?: string
+  status: "OPEN" | "WON" | "LOST"        // Required
+  owners: Array<{ id: number }>           // Required (can be empty)
+  taskIds: string[]                       // Required (can be empty)
+  value: {                                // Required
+    amount: number
+    currency: string
   }
+  contacts?: Array<{ id: string }>
   estimated_close_time?: string
   custom_fields?: Record<string, any>
 }

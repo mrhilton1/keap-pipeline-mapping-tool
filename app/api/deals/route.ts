@@ -46,10 +46,17 @@ export async function POST(request: Request) {
 
     console.log(`[Deals API] Creating deal: ${name} in stage ${stage_id}`)
     
-    // Build v2 API request
+    // Build v2 API request - ALL required fields per API error
     const dealRequest: any = { 
       name, 
       stage_id,
+      status: "OPEN",           // Required: OPEN, WON, LOST
+      owners: [],               // Required: array of owner objects
+      taskIds: [],              // Required: array (can be empty)
+      value: {                  // Required: value object
+        amount: value ? Number(value) : 0,
+        currency: currency || "USD"
+      }
     }
     
     // Add contacts array if contact_id provided
@@ -57,17 +64,9 @@ export async function POST(request: Request) {
       dealRequest.contacts = [{ id: String(contact_id) }]
     }
     
-    // Add owner if provided
+    // Add owner to owners array if provided
     if (owner_id) {
-      dealRequest.owner_id = Number(owner_id)
-    }
-    
-    // Add value as object if provided
-    if (value) {
-      dealRequest.value = {
-        amount: Number(value),
-        currency: currency || "USD"
-      }
+      dealRequest.owners = [{ id: Number(owner_id) }]
     }
     
     // Add estimated close time if provided

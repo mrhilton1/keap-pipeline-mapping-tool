@@ -702,73 +702,61 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, savedConf
                           
                           {/* Pipeline & Stage selectors - shown when _stage_mapping is selected */}
                           {currentMapping === "_stage_mapping" && (
-                            <div className="mt-2 p-3 bg-blue-50/50 rounded-lg border border-blue-100 space-y-2">
-                              <p className="text-xs font-medium text-blue-700">Select destination pipeline & stage:</p>
-                              
-                              {/* Pipeline selector */}
-                              <Select
-                                value={stageMapping.pipelineId || ""}
-                                onValueChange={handlePipelineChange}
-                              >
-                                <SelectTrigger className="w-full bg-white">
-                                  <SelectValue placeholder="Select Pipeline..." />
-                                </SelectTrigger>
-                                <SelectContent position="popper" className="max-h-[200px]">
-                                  {pipelines.length === 0 ? (
-                                    <div className="px-2 py-4 text-center text-sm text-muted-foreground">
-                                      No pipelines found. Create one first.
-                                    </div>
-                                  ) : (
-                                    pipelines.map(p => (
-                                      <SelectItem key={p.id} value={p.id}>
-                                        <div className="flex items-center gap-2">
-                                          <span>{p.name}</span>
-                                          <Badge variant="outline" className="text-[9px]">
-                                            {p.stages?.length || 0} stages
-                                          </Badge>
-                                        </div>
-                                      </SelectItem>
-                                    ))
-                                  )}
-                                </SelectContent>
-                              </Select>
-                              
-                              {/* Stage selector - shown after pipeline is selected */}
-                              {stageMapping.pipelineId && (
+                            <div className="mt-2 p-2 bg-blue-50/50 rounded border border-blue-100 space-y-1.5">
+                              <div className="flex gap-2">
+                                {/* Pipeline selector */}
                                 <Select
-                                  value={stageMapping.stageId || ""}
-                                  onValueChange={handleStageChange}
+                                  value={stageMapping.pipelineId || ""}
+                                  onValueChange={handlePipelineChange}
                                 >
-                                  <SelectTrigger className="w-full bg-white">
-                                    <SelectValue placeholder="Select Stage..." />
+                                  <SelectTrigger className="h-8 text-xs bg-white flex-1">
+                                    <SelectValue placeholder="Pipeline..." />
                                   </SelectTrigger>
                                   <SelectContent position="popper" className="max-h-[200px]">
-                                    {availableStages.length === 0 ? (
-                                      <div className="px-2 py-4 text-center text-sm text-muted-foreground">
-                                        No stages in this pipeline
+                                    {pipelines.length === 0 ? (
+                                      <div className="px-2 py-2 text-center text-xs text-muted-foreground">
+                                        No pipelines
                                       </div>
                                     ) : (
-                                      availableStages.map((s, idx) => (
-                                        <SelectItem key={s.id} value={s.id}>
-                                          <div className="flex items-center gap-2">
-                                            <span className="text-muted-foreground text-xs">{idx + 1}.</span>
-                                            <span>{s.name}</span>
-                                          </div>
+                                      pipelines.map(p => (
+                                        <SelectItem key={p.id} value={p.id} className="text-xs">
+                                          {p.name} ({p.stages?.length || 0})
                                         </SelectItem>
                                       ))
                                     )}
                                   </SelectContent>
                                 </Select>
-                              )}
                               
-                              {/* Show selected mapping */}
+                                {/* Stage selector */}
+                                <Select
+                                  value={stageMapping.stageId || ""}
+                                  onValueChange={handleStageChange}
+                                  disabled={!stageMapping.pipelineId}
+                                >
+                                  <SelectTrigger className="h-8 text-xs bg-white flex-1">
+                                    <SelectValue placeholder="Stage..." />
+                                  </SelectTrigger>
+                                  <SelectContent position="popper" className="max-h-[200px]">
+                                    {availableStages.length === 0 ? (
+                                      <div className="px-2 py-2 text-center text-xs text-muted-foreground">
+                                        Select pipeline first
+                                      </div>
+                                    ) : (
+                                      availableStages.map((s, idx) => (
+                                        <SelectItem key={s.id} value={s.id} className="text-xs">
+                                          {idx + 1}. {s.name}
+                                        </SelectItem>
+                                      ))
+                                    )}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              
+                              {/* Show selected mapping - compact */}
                               {stageMapping.pipelineName && stageMapping.stageName && (
-                                <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 px-2 py-1.5 rounded">
-                                  <Check className="w-3 h-3" />
-                                  <span>
-                                    Stage will map <strong>"{field.sampleValues[0] || 'value'}"</strong> → 
-                                    <strong> {stageMapping.pipelineName} &gt; {stageMapping.stageName}</strong>
-                                  </span>
+                                <div className="flex items-center gap-1 text-[10px] text-green-700">
+                                  <Check className="w-3 h-3 flex-shrink-0" />
+                                  <span className="truncate">→ {stageMapping.pipelineName} &gt; {stageMapping.stageName}</span>
                                 </div>
                               )}
                             </div>
@@ -776,32 +764,25 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, savedConf
                           
                           {/* Owner selector - shown when _owner_mapping is selected */}
                           {currentMapping === "_owner_mapping" && (
-                            <div className="mt-2 p-3 bg-purple-50/50 rounded-lg border border-purple-100 space-y-2">
-                              <p className="text-xs font-medium text-purple-700">Select deal owner:</p>
-                              
+                            <div className="mt-2 p-2 bg-purple-50/50 rounded border border-purple-100 space-y-1.5">
                               <Select
                                 value={ownerMapping.userId?.toString() || ""}
                                 onValueChange={handleOwnerChange}
                               >
-                                <SelectTrigger className="w-full bg-white">
-                                  <SelectValue placeholder="Select User..." />
+                                <SelectTrigger className="h-8 text-xs bg-white">
+                                  <SelectValue placeholder="Select owner..." />
                                 </SelectTrigger>
-                                <SelectContent position="popper" className="max-h-[250px]">
+                                <SelectContent position="popper" className="max-h-[200px]">
                                   {users.length === 0 ? (
-                                    <div className="px-2 py-4 text-center text-sm text-muted-foreground">
-                                      No users found in your Keap account
+                                    <div className="px-2 py-2 text-center text-xs text-muted-foreground">
+                                      No users found
                                     </div>
                                   ) : (
                                     users.map(user => {
                                       const fullName = `${user.given_name || ''} ${user.family_name || ''}`.trim()
                                       return (
-                                        <SelectItem key={user.id} value={user.id.toString()}>
-                                          <div className="flex flex-col">
-                                            <span className="font-medium">{fullName || 'No name'}</span>
-                                            {user.email_address && (
-                                              <span className="text-xs text-muted-foreground">{user.email_address}</span>
-                                            )}
-                                          </div>
+                                        <SelectItem key={user.id} value={user.id.toString()} className="text-xs">
+                                          {fullName || user.email_address || 'No name'}
                                         </SelectItem>
                                       )
                                     })
@@ -809,13 +790,11 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, savedConf
                                 </SelectContent>
                               </Select>
                               
-                              {/* Show selected owner */}
+                              {/* Show selected owner - compact */}
                               {ownerMapping.userName && (
-                                <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 px-2 py-1.5 rounded">
-                                  <Check className="w-3 h-3" />
-                                  <span>
-                                    All deals will be assigned to <strong>{ownerMapping.userName}</strong>
-                                  </span>
+                                <div className="flex items-center gap-1 text-[10px] text-green-700">
+                                  <Check className="w-3 h-3 flex-shrink-0" />
+                                  <span className="truncate">All deals → {ownerMapping.userName}</span>
                                 </div>
                               )}
                             </div>
