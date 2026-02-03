@@ -46,20 +46,21 @@ export async function POST(request: Request) {
 
     console.log(`[Deals API] Creating deal: ${name} in stage ${stage_id}`)
     
-    // Build v2 API request - ALL required fields per API error
+    // Build v2 API request - ALL fields are REQUIRED per API errors
     const dealRequest: any = { 
       name, 
       stage_id,
-      status: "OPEN",           // Required: OPEN, WON, LOST
-      owners: [],               // Required: array of owner objects
-      taskIds: [],              // Required: array (can be empty)
-      value: {                  // Required: value object
+      status: "OPEN",                    // REQUIRED: OPEN, WON, LOST
+      owners: [],                        // REQUIRED: array (can be empty)
+      contacts: [],                      // REQUIRED: array (can be empty)
+      taskIds: [],                       // REQUIRED: array (can be empty)
+      value: {                           // REQUIRED: value object
         amount: value ? Number(value) : 0,
         currency: currency || "USD"
       }
     }
     
-    // Add contacts array if contact_id provided
+    // Add contact to contacts array if provided
     if (contact_id) {
       dealRequest.contacts = [{ id: String(contact_id) }]
     }
@@ -75,6 +76,7 @@ export async function POST(request: Request) {
     }
 
     console.log("[Deals API] Request body:", JSON.stringify(dealRequest))
+    console.log("[Deals API] Version: 2024-02-03-v2")  // Version marker to verify deploy
     
     const client = new KeapClient(accessToken.value)
     const deal = await client.createDeal(dealRequest)
