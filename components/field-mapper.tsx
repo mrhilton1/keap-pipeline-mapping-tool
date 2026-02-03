@@ -33,6 +33,26 @@ interface FieldMapping {
   targetField: string | null
 }
 
+interface Pipeline {
+  id: string
+  name: string
+  stages?: Stage[]
+}
+
+interface Stage {
+  id: string
+  name: string
+  pipeline_id?: string
+  order?: number
+}
+
+interface StageMapping {
+  pipelineId: string | null
+  pipelineName: string | null
+  stageId: string | null
+  stageName: string | null
+}
+
 const FIELD_TYPES = [
   { value: "TEXT", label: "Text (short)" },
   { value: "LONG_TEXT", label: "Text (long)" },
@@ -98,14 +118,24 @@ const DEFAULT_MAPPINGS: Record<string, string> = {
 
 interface FieldMapperProps {
   opportunities: Opportunity[]
+  pipelines?: Pipeline[]
 }
 
-export function FieldMapper({ opportunities }: FieldMapperProps) {
+export function FieldMapper({ opportunities, pipelines: propPipelines }: FieldMapperProps) {
   const [customFields, setCustomFields] = useState<DealField[]>([])
   const [mappings, setMappings] = useState<FieldMapping[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  
+  // Pipelines for stage mapping
+  const [pipelines, setPipelines] = useState<Pipeline[]>(propPipelines || [])
+  const [stageMapping, setStageMapping] = useState<StageMapping>({
+    pipelineId: null,
+    pipelineName: null,
+    stageId: null,
+    stageName: null
+  })
   
   // Create field dialog
   const [showCreateDialog, setShowCreateDialog] = useState(false)
@@ -192,19 +222,26 @@ export function FieldMapper({ opportunities }: FieldMapperProps) {
       .sort((a, b) => b.count - a.count)
   }, [opportunities])
 
-  // Load custom fields from Keap
+  // Load custom fields and pipelines from Keap
   const loadCustomFields = async () => {
     try {
       setLoading(true)
       setError(null)
-      const res = await fetch("/api/custom-fields")
-      const data = await res.json()
       
-      if (!res.ok) {
-        throw new Error(data.error || data.details || "Failed to load")
+      // Fetch custom fields and pipelines in parallel
+      const [customFieldsRes, pipelinesRes] = await Promise.all([
+        fetch("/api/custom-fields"),
+        fetch("/api/pipelines")
+      ])
+      
+      const customFieldsData = await customFieldsRes.json()
+      const pipelinesData = await pipelinesRes.json()
+      
+      if (!customFieldsRes.ok) {
+        throw new Error(customFieldsData.error || customFieldsData.details || "Failed to load custom fields")
       }
       
-      const fields = (data.custom_fields || []).map((f: any) => ({
+      const fields = (customFieldsData.custom_fields || []).map((f: any) => ({
         name: f.name,
         label: f.label,
         type: f.type.primitive_type,
@@ -214,6 +251,11 @@ export function FieldMapper({ opportunities }: FieldMapperProps) {
       
       setCustomFields(fields)
       
+      // Set pipelines if loaded
+      if (pipelinesRes.ok && pipelinesData.pipelines) {
+        setPipelines(pipelinesData.pipelines)
+      }
+      
       // Initialize mappings with defaults
       const initialMappings = discoveredFields.map(df => ({
         sourceField: df.path,
@@ -222,7 +264,7 @@ export function FieldMapper({ opportunities }: FieldMapperProps) {
       setMappings(initialMappings)
       
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load custom fields")
+      setError(err instanceof Error ? err.message : "Failed to load data")
     } finally {
       setLoading(false)
     }
@@ -318,9 +360,38 @@ export function FieldMapper({ opportunities }: FieldMapperProps) {
     }
   }
 
+  // Get stages for the selected pipeline
+  const selectedPipeline = pipelines.find(p => p.id === stageMapping.pipelineId)
+  const availableStages = selectedPipeline?.stages || []
+
+  // Handle pipeline selection
+  const handlePipelineChange = (pipelineId: string) => {
+    const pipeline = pipelines.find(p => p.id === pipelineId)
+    setStageMapping({
+      pipelineId,
+      pipelineName: pipeline?.name || null,
+      stageId: null,  // Reset stage when pipeline changes
+      stageName: null
+    })
+  }
+
+  // Handle stage selection
+  const handleStageChange = (stageId: string) => {
+    const stage = availableStages.find(s => s.id === stageId)
+    setStageMapping(prev => ({
+      ...prev,
+      stageId,
+      stageName: stage?.name || null
+    }))
+  }
+
   // Count mapped fields
   const mappedCount = mappings.filter(m => m.targetField).length
   const totalFields = discoveredFields.length
+  
+  // Check if stage mapping is configured
+  const hasStageMappingField = mappings.some(m => m.targetField === "_stage_mapping")
+  const isStageMappingComplete = stageMapping.pipelineId && stageMapping.stageId
 
   if (opportunities.length === 0) {
     return (
@@ -422,7 +493,19 @@ export function FieldMapper({ opportunities }: FieldMapperProps) {
                           >
                             <SelectTrigger className="w-full">
                               <SelectValue>
-                                {currentMapping ? (
+                                {currentMapping === "_stage_mapping" ? (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-blue-700">
+                                      {stageMapping.pipelineName && stageMapping.stageName 
+                                        ? `${stageMapping.pipelineName} → ${stageMapping.stageName}`
+                                        : "Map to Pipeline Stage"
+                                      }
+                                    </span>
+                                    {stageMapping.stageId && (
+                                      <Badge variant="outline" className="text-[10px] bg-blue-50">Configured</Badge>
+                                    )}
+                                  </div>
+                                ) : currentMapping ? (
                                   <div className="flex items-center gap-2">
                                     <span>{targetField?.label || currentMapping}</span>
                                     {targetField?.isCustom && (
@@ -501,6 +584,80 @@ export function FieldMapper({ opportunities }: FieldMapperProps) {
                               )}
                             </SelectContent>
                           </Select>
+                          
+                          {/* Pipeline & Stage selectors - shown when _stage_mapping is selected */}
+                          {currentMapping === "_stage_mapping" && (
+                            <div className="mt-2 p-3 bg-blue-50/50 rounded-lg border border-blue-100 space-y-2">
+                              <p className="text-xs font-medium text-blue-700">Select destination pipeline & stage:</p>
+                              
+                              {/* Pipeline selector */}
+                              <Select
+                                value={stageMapping.pipelineId || ""}
+                                onValueChange={handlePipelineChange}
+                              >
+                                <SelectTrigger className="w-full bg-white">
+                                  <SelectValue placeholder="Select Pipeline..." />
+                                </SelectTrigger>
+                                <SelectContent position="popper" className="max-h-[200px]">
+                                  {pipelines.length === 0 ? (
+                                    <div className="px-2 py-4 text-center text-sm text-muted-foreground">
+                                      No pipelines found. Create one first.
+                                    </div>
+                                  ) : (
+                                    pipelines.map(p => (
+                                      <SelectItem key={p.id} value={p.id}>
+                                        <div className="flex items-center gap-2">
+                                          <span>{p.name}</span>
+                                          <Badge variant="outline" className="text-[9px]">
+                                            {p.stages?.length || 0} stages
+                                          </Badge>
+                                        </div>
+                                      </SelectItem>
+                                    ))
+                                  )}
+                                </SelectContent>
+                              </Select>
+                              
+                              {/* Stage selector - shown after pipeline is selected */}
+                              {stageMapping.pipelineId && (
+                                <Select
+                                  value={stageMapping.stageId || ""}
+                                  onValueChange={handleStageChange}
+                                >
+                                  <SelectTrigger className="w-full bg-white">
+                                    <SelectValue placeholder="Select Stage..." />
+                                  </SelectTrigger>
+                                  <SelectContent position="popper" className="max-h-[200px]">
+                                    {availableStages.length === 0 ? (
+                                      <div className="px-2 py-4 text-center text-sm text-muted-foreground">
+                                        No stages in this pipeline
+                                      </div>
+                                    ) : (
+                                      availableStages.map((s, idx) => (
+                                        <SelectItem key={s.id} value={s.id}>
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-muted-foreground text-xs">{idx + 1}.</span>
+                                            <span>{s.name}</span>
+                                          </div>
+                                        </SelectItem>
+                                      ))
+                                    )}
+                                  </SelectContent>
+                                </Select>
+                              )}
+                              
+                              {/* Show selected mapping */}
+                              {stageMapping.pipelineName && stageMapping.stageName && (
+                                <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 px-2 py-1.5 rounded">
+                                  <Check className="w-3 h-3" />
+                                  <span>
+                                    Stage will map <strong>"{field.sampleValues[0] || 'value'}"</strong> → 
+                                    <strong> {stageMapping.pipelineName} &gt; {stageMapping.stageName}</strong>
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </td>
                         
                         {/* Create button */}
