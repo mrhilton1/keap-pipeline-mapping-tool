@@ -159,15 +159,31 @@ export function PipelineBuilder({
     }
 
     const fromIndex = dragState.stageIndex
-    const toIndex = stageIndex
+    let toIndex = stageIndex
 
     if (fromIndex !== toIndex) {
-      // Optimistically reorder stages
+      // Create a copy of the suggestions
       const newSuggestions = [...suggestions]
       const stages = [...newSuggestions[pipelineIndex].stages]
+      
+      // Remove the item from its original position
       const [movedStage] = stages.splice(fromIndex, 1)
+      
+      // Adjust toIndex if moving down (since array is now shorter)
+      if (fromIndex < toIndex) {
+        toIndex = toIndex - 1
+      }
+      
+      // Insert at the new position
       stages.splice(toIndex, 0, movedStage)
-      newSuggestions[pipelineIndex] = { ...newSuggestions[pipelineIndex], stages }
+      
+      // Update the suggestions
+      newSuggestions[pipelineIndex] = { 
+        ...newSuggestions[pipelineIndex], 
+        stages: stages 
+      }
+      
+      console.log("[Drag] Moved stage from", fromIndex, "to", toIndex, "Result:", stages)
       onSuggestionsChange(newSuggestions)
     }
 
@@ -278,9 +294,11 @@ export function PipelineBuilder({
                     const isDragging = dragState?.pipelineIndex === pIndex && dragState?.stageIndex === sIndex
                     const isDropTarget = dropTarget?.pipelineIndex === pIndex && dropTarget?.stageIndex === sIndex
                     const showDropIndicator = isDropTarget && dragState && dragState.stageIndex !== sIndex
+                    // Use a stable key that changes with position
+                    const stageKey = `${pIndex}-${sIndex}-${stage || 'empty'}`
                     
                     return (
-                      <div key={sIndex}>
+                      <div key={stageKey}>
                         {/* Drop indicator above */}
                         {showDropIndicator && dragState.stageIndex > sIndex && (
                           <div className="h-1 bg-primary rounded-full mx-2 mb-1 animate-pulse" />
