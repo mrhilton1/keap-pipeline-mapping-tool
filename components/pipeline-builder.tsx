@@ -149,8 +149,30 @@ export function PipelineBuilder({
     // Don't clear immediately to prevent flickering
   }
 
+  const moveStage = (pipelineIndex: number, fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex) return
+    
+    const newSuggestions = [...suggestions]
+    const stages = [...newSuggestions[pipelineIndex].stages]
+    
+    // Remove the stage from original position
+    const [movedStage] = stages.splice(fromIndex, 1)
+    
+    // Insert at target position (no adjustment needed - splice handles it)
+    stages.splice(toIndex, 0, movedStage)
+    
+    newSuggestions[pipelineIndex] = { 
+      ...newSuggestions[pipelineIndex], 
+      stages 
+    }
+    
+    console.log("[Drag] Reorder:", fromIndex, "→", toIndex, "Result:", stages.map((s, i) => `${i}:${s}`))
+    onSuggestionsChange(newSuggestions)
+  }
+
   const handleDrop = (e: React.DragEvent, pipelineIndex: number, stageIndex: number) => {
     e.preventDefault()
+    e.stopPropagation()
     
     if (!dragState || dragState.pipelineIndex !== pipelineIndex) {
       setDragState(null)
@@ -158,35 +180,8 @@ export function PipelineBuilder({
       return
     }
 
-    const fromIndex = dragState.stageIndex
-    let toIndex = stageIndex
-
-    if (fromIndex !== toIndex) {
-      // Create a copy of the suggestions
-      const newSuggestions = [...suggestions]
-      const stages = [...newSuggestions[pipelineIndex].stages]
-      
-      // Remove the item from its original position
-      const [movedStage] = stages.splice(fromIndex, 1)
-      
-      // Adjust toIndex if moving down (since array is now shorter)
-      if (fromIndex < toIndex) {
-        toIndex = toIndex - 1
-      }
-      
-      // Insert at the new position
-      stages.splice(toIndex, 0, movedStage)
-      
-      // Update the suggestions
-      newSuggestions[pipelineIndex] = { 
-        ...newSuggestions[pipelineIndex], 
-        stages: stages 
-      }
-      
-      console.log("[Drag] Moved stage from", fromIndex, "to", toIndex, "Result:", stages)
-      onSuggestionsChange(newSuggestions)
-    }
-
+    moveStage(pipelineIndex, dragState.stageIndex, stageIndex)
+    
     setDragState(null)
     setDropTarget(null)
   }
@@ -294,11 +289,9 @@ export function PipelineBuilder({
                     const isDragging = dragState?.pipelineIndex === pIndex && dragState?.stageIndex === sIndex
                     const isDropTarget = dropTarget?.pipelineIndex === pIndex && dropTarget?.stageIndex === sIndex
                     const showDropIndicator = isDropTarget && dragState && dragState.stageIndex !== sIndex
-                    // Use a stable key that changes with position
-                    const stageKey = `${pIndex}-${sIndex}-${stage || 'empty'}`
                     
                     return (
-                      <div key={stageKey}>
+                      <div key={`stage-${pIndex}-${sIndex}`}>
                         {/* Drop indicator above */}
                         {showDropIndicator && dragState.stageIndex > sIndex && (
                           <div className="h-1 bg-primary rounded-full mx-2 mb-1 animate-pulse" />
