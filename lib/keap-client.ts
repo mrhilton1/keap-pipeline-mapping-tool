@@ -51,6 +51,15 @@ export interface KeapOpportunitiesResponse {
   next?: string
 }
 
+export interface KeapUser {
+  id: number
+  email_address?: string
+  given_name?: string
+  family_name?: string
+  partner?: boolean
+  status?: string
+}
+
 // ============ New v2 API Types (Pipelines, Stages, Deals) ============
 export interface KeapPipeline {
   id: string
@@ -211,6 +220,16 @@ export class KeapClient {
       `/opportunity/stage_pipeline`,
       { method: "GET" }
     )
+  }
+
+  // v1 Users - fetches all users in the Keap account
+  async getUsers(): Promise<KeapUser[]> {
+    const response = await this.request<{ users: KeapUser[] }>(
+      this.legacyBaseUrl,
+      `/users`,
+      { method: "GET" }
+    )
+    return response.users || []
   }
 
   // ============ New v2 API Methods (Pipelines) ============

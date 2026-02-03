@@ -53,6 +53,18 @@ interface StageMapping {
   stageName: string | null
 }
 
+interface KeapUser {
+  id: number
+  email_address?: string
+  given_name?: string
+  family_name?: string
+}
+
+interface OwnerMapping {
+  userId: number | null
+  userName: string | null
+}
+
 const FIELD_TYPES = [
   { value: "TEXT", label: "Text (short)" },
   { value: "LONG_TEXT", label: "Text (long)" },
@@ -84,16 +96,18 @@ const STANDARD_DEAL_FIELDS: DealField[] = [
 const SPECIAL_DEAL_FIELDS: DealField[] = [
   { name: "_deal_notes", label: "Add as Deal Note", type: "LONG_TEXT", isCustom: false },
   { name: "_stage_mapping", label: "Map to Pipeline Stage", type: "STAGE", isCustom: false },
+  { name: "_owner_mapping", label: "Select Deal Owner", type: "USER", isCustom: false },
 ]
 
 // Descriptions for standard fields to explain what they do
 const FIELD_DESCRIPTIONS: Record<string, string> = {
   "contacts.id": "Links contact by ID, displays name",
-  "owner_id": "Links user by ID, displays name",
+  "owner_id": "Pass user ID directly from source",
   "value.amount": "Numeric value only",
   "value.currency": "e.g., USD",
   "_deal_notes": "Creates note via /v2/deals/{id}/notes API",
   "_stage_mapping": "Select pipeline & stage below",
+  "_owner_mapping": "Select a specific user from your team",
 }
 
 // Fields to hide from source list (not useful for migration)
@@ -102,6 +116,16 @@ const HIDDEN_SOURCE_FIELDS = [
   "affiliate_id",          // Internal
   "stage.id",              // Use stage.name with pipeline mapping instead
   "stage.details.check_list_items",
+  // User fields - use user.id with owner mapping instead
+  "user.first_name",
+  "user.last_name",
+  // Contact fields - use contact.id with primary contact mapping instead
+  "contact.email",
+  "contact.first_name",
+  "contact.last_name",
+  "contact.company_name",
+  "contact.phone_number",
+  "contact.job_title",
 ]
 
 // Default mappings - opportunity field → deal field
@@ -109,7 +133,7 @@ const DEFAULT_MAPPINGS: Record<string, string> = {
   "opportunity_title": "name",
   "projected_revenue_high": "value.amount",
   "contact.id": "contacts.id",           // Contact ID → Primary Contact
-  "user.id": "owner_id",                  // User ID → Deal Owner
+  "user.id": "_owner_mapping",           // User ID → Select Deal Owner from list
   "estimated_close_date": "estimated_close_time",
   "stage.name": "_stage_mapping",         // Stage name → Pipeline stage selector
   "opportunity_notes": "_deal_notes",     // Notes → Deal notes API
@@ -135,6 +159,13 @@ export function FieldMapper({ opportunities, pipelines: propPipelines }: FieldMa
     pipelineName: null,
     stageId: null,
     stageName: null
+  })
+  
+  // Users for owner mapping
+  const [users, setUsers] = useState<KeapUser[]>([])
+  const [ownerMapping, setOwnerMapping] = useState<OwnerMapping>({
+    userId: null,
+    userName: null
   })
   
   // Create field dialog
@@ -222,20 +253,22 @@ export function FieldMapper({ opportunities, pipelines: propPipelines }: FieldMa
       .sort((a, b) => b.count - a.count)
   }, [opportunities])
 
-  // Load custom fields and pipelines from Keap
+  // Load custom fields, pipelines, and users from Keap
   const loadCustomFields = async () => {
     try {
       setLoading(true)
       setError(null)
       
-      // Fetch custom fields and pipelines in parallel
-      const [customFieldsRes, pipelinesRes] = await Promise.all([
+      // Fetch custom fields, pipelines, and users in parallel
+      const [customFieldsRes, pipelinesRes, usersRes] = await Promise.all([
         fetch("/api/custom-fields"),
-        fetch("/api/pipelines")
+        fetch("/api/pipelines"),
+        fetch("/api/users")
       ])
       
       const customFieldsData = await customFieldsRes.json()
       const pipelinesData = await pipelinesRes.json()
+      const usersData = await usersRes.json()
       
       if (!customFieldsRes.ok) {
         throw new Error(customFieldsData.error || customFieldsData.details || "Failed to load custom fields")
@@ -254,6 +287,11 @@ export function FieldMapper({ opportunities, pipelines: propPipelines }: FieldMa
       // Set pipelines if loaded
       if (pipelinesRes.ok && pipelinesData.pipelines) {
         setPipelines(pipelinesData.pipelines)
+      }
+      
+      // Set users if loaded
+      if (usersRes.ok && usersData.users) {
+        setUsers(usersData.users)
       }
       
       // Initialize mappings with defaults
@@ -385,6 +423,18 @@ export function FieldMapper({ opportunities, pipelines: propPipelines }: FieldMa
     }))
   }
 
+  // Handle owner (user) selection
+  const handleOwnerChange = (userId: string) => {
+    const user = users.find(u => u.id.toString() === userId)
+    const userName = user 
+      ? `${user.given_name || ''} ${user.family_name || ''}`.trim() || user.email_address || 'Unknown'
+      : null
+    setOwnerMapping({
+      userId: user?.id || null,
+      userName
+    })
+  }
+
   // Count mapped fields
   const mappedCount = mappings.filter(m => m.targetField).length
   const totalFields = discoveredFields.length
@@ -503,6 +553,18 @@ export function FieldMapper({ opportunities, pipelines: propPipelines }: FieldMa
                                     </span>
                                     {stageMapping.stageId && (
                                       <Badge variant="outline" className="text-[10px] bg-blue-50">Configured</Badge>
+                                    )}
+                                  </div>
+                                ) : currentMapping === "_owner_mapping" ? (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-purple-700">
+                                      {ownerMapping.userName 
+                                        ? `Owner: ${ownerMapping.userName}`
+                                        : "Select Deal Owner"
+                                      }
+                                    </span>
+                                    {ownerMapping.userId && (
+                                      <Badge variant="outline" className="text-[10px] bg-purple-50">Configured</Badge>
                                     )}
                                   </div>
                                 ) : currentMapping ? (
@@ -653,6 +715,53 @@ export function FieldMapper({ opportunities, pipelines: propPipelines }: FieldMa
                                   <span>
                                     Stage will map <strong>"{field.sampleValues[0] || 'value'}"</strong> → 
                                     <strong> {stageMapping.pipelineName} &gt; {stageMapping.stageName}</strong>
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          
+                          {/* Owner selector - shown when _owner_mapping is selected */}
+                          {currentMapping === "_owner_mapping" && (
+                            <div className="mt-2 p-3 bg-purple-50/50 rounded-lg border border-purple-100 space-y-2">
+                              <p className="text-xs font-medium text-purple-700">Select deal owner:</p>
+                              
+                              <Select
+                                value={ownerMapping.userId?.toString() || ""}
+                                onValueChange={handleOwnerChange}
+                              >
+                                <SelectTrigger className="w-full bg-white">
+                                  <SelectValue placeholder="Select User..." />
+                                </SelectTrigger>
+                                <SelectContent position="popper" className="max-h-[250px]">
+                                  {users.length === 0 ? (
+                                    <div className="px-2 py-4 text-center text-sm text-muted-foreground">
+                                      No users found in your Keap account
+                                    </div>
+                                  ) : (
+                                    users.map(user => {
+                                      const fullName = `${user.given_name || ''} ${user.family_name || ''}`.trim()
+                                      return (
+                                        <SelectItem key={user.id} value={user.id.toString()}>
+                                          <div className="flex flex-col">
+                                            <span className="font-medium">{fullName || 'No name'}</span>
+                                            {user.email_address && (
+                                              <span className="text-xs text-muted-foreground">{user.email_address}</span>
+                                            )}
+                                          </div>
+                                        </SelectItem>
+                                      )
+                                    })
+                                  )}
+                                </SelectContent>
+                              </Select>
+                              
+                              {/* Show selected owner */}
+                              {ownerMapping.userName && (
+                                <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 px-2 py-1.5 rounded">
+                                  <Check className="w-3 h-3" />
+                                  <span>
+                                    All deals will be assigned to <strong>{ownerMapping.userName}</strong>
                                   </span>
                                 </div>
                               )}
