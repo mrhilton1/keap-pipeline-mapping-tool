@@ -222,42 +222,87 @@ export function MigrationDashboard() {
       // Create deals from selected opportunities
       const selectedOpps = opportunities.filter(o => selectedOpportunities.has(o.id))
       
-      const deals = selectedOpps.map(opp => ({
-        name: opp.opportunity_title,
-        stage_id: stageId,
-        contact_id: opp.contact?.id,
-        value: opp.projected_revenue_high || opp.projected_revenue_low
-      }))
-
-      // TODO: Call bulk create deals API
-      // For now, create one by one
+      // Use field mapping config if available
+      const useStaticOwner = fieldMappingConfig?.ownerMapping?.userId
+      const useStaticStage = fieldMappingConfig?.stageMapping?.stageId
+      
+      // Use the stage from field mapping config if set, otherwise use the passed stageId
+      const finalStageId = useStaticStage || stageId
+      
+      console.log("[Migration] Creating deals with stage:", finalStageId)
+      console.log("[Migration] Field mapping config:", fieldMappingConfig)
+      
       let created = 0
       let failed = 0
+      const errors: string[] = []
       
-      for (const deal of deals) {
+      for (const opp of selectedOpps) {
         try {
+          const dealData: Record<string, any> = {
+            name: opp.opportunity_title,
+            stage_id: finalStageId,
+          }
+          
+          // Add contact if available
+          if (opp.contact?.id) {
+            dealData.contact_id = opp.contact.id
+          }
+          
+          // Add owner - use static owner from config, or original owner
+          if (useStaticOwner) {
+            dealData.owner_id = useStaticOwner
+          } else if (opp.user?.id) {
+            dealData.owner_id = opp.user.id
+          }
+          
+          // Add value
+          if (opp.projected_revenue_high || opp.projected_revenue_low) {
+            dealData.value = opp.projected_revenue_high || opp.projected_revenue_low
+            dealData.currency = "USD"
+          }
+          
+          // Add estimated close date
+          if (opp.estimated_close_date) {
+            dealData.estimated_close_time = opp.estimated_close_date
+          }
+          
+          console.log("[Migration] Creating deal:", dealData.name)
+          
           const response = await fetch("/api/deals", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(deal)
+            body: JSON.stringify(dealData)
           })
           
           if (response.ok) {
             created++
           } else {
+            const errorData = await response.json()
+            errors.push(`${opp.opportunity_title}: ${errorData.details || errorData.error}`)
             failed++
           }
-        } catch {
+        } catch (err) {
+          errors.push(`${opp.opportunity_title}: ${err instanceof Error ? err.message : 'Unknown error'}`)
           failed++
         }
       }
 
-      toast({
-        title: "Migration Complete",
-        description: `Created ${created} deals${failed > 0 ? `, ${failed} failed` : ''}`,
-      })
+      if (created > 0) {
+        toast({
+          title: "Migration Complete",
+          description: `Created ${created} deals${failed > 0 ? ` (${failed} failed)` : ''}`,
+        })
+      } else {
+        toast({
+          title: "Migration Failed",
+          description: errors[0] || "No deals were created",
+          variant: "destructive"
+        })
+      }
       
-      setSelectedOpportunities(new Set())
+      if (created > 0) {
+        setSelectedOpportunities(new Set())
+      }
     } catch (err) {
       toast({
         title: "Migration Failed",

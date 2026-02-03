@@ -523,9 +523,7 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, savedConf
       {/* Info about special mappings */}
       <Alert className="bg-blue-50/50 border-blue-200">
         <AlertDescription className="text-sm">
-          <strong>Note:</strong> Most fields are mapped 1-to-1 (each deal gets its own value). 
-          For <strong>Stage</strong> and <strong>Owner</strong>, you can choose to assign ALL deals to the same destination, 
-          or use the original value from each opportunity.
+          <strong>Note:</strong> Most fields are mapped 1-to-1, meaning each deal gets its own value from the source opportunity. For <strong>Stage</strong> and <strong>Owner</strong>, you can either assign ALL deals to the same destination, or use the original value from each opportunity.
         </AlertDescription>
       </Alert>
 

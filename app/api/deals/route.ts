@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { name, stage_id, contact_id, value, currency } = body
+    const { name, stage_id, contact_id, owner_id, value, currency, estimated_close_time } = body
 
     if (!name || !stage_id) {
       return NextResponse.json({ 
@@ -45,14 +45,40 @@ export async function POST(request: Request) {
     }
 
     console.log(`[Deals API] Creating deal: ${name} in stage ${stage_id}`)
-    const client = new KeapClient(accessToken.value)
-    const deal = await client.createDeal({ 
+    
+    // Build v2 API request
+    const dealRequest: any = { 
       name, 
-      stage_id, 
-      contact_id, 
-      value,
-      currency 
-    })
+      stage_id,
+    }
+    
+    // Add contacts array if contact_id provided
+    if (contact_id) {
+      dealRequest.contacts = [{ id: String(contact_id) }]
+    }
+    
+    // Add owner if provided
+    if (owner_id) {
+      dealRequest.owner_id = Number(owner_id)
+    }
+    
+    // Add value as object if provided
+    if (value) {
+      dealRequest.value = {
+        amount: Number(value),
+        currency: currency || "USD"
+      }
+    }
+    
+    // Add estimated close time if provided
+    if (estimated_close_time) {
+      dealRequest.estimated_close_time = estimated_close_time
+    }
+
+    console.log("[Deals API] Request body:", JSON.stringify(dealRequest))
+    
+    const client = new KeapClient(accessToken.value)
+    const deal = await client.createDeal(dealRequest)
 
     console.log("[Deals API] Deal created:", deal.id)
     return NextResponse.json(deal)
