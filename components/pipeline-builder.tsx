@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -23,6 +23,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { StageSelector, StageOption } from "./stage-selector"
+import { cn } from "@/lib/utils"
 
 export interface PipelineSuggestion {
   name: string
@@ -39,7 +40,7 @@ interface PipelineBuilderProps {
   isCreating: boolean
   isAnalyzing?: boolean
   availableStages: StageOption[]
-  onStageCreated?: (stageName: string) => void // Callback when a custom stage is created
+  onStageCreated?: (stageName: string) => void
 }
 
 export function PipelineBuilder({ 
@@ -53,6 +54,18 @@ export function PipelineBuilder({
   onStageCreated
 }: PipelineBuilderProps) {
   const [expandedPipelines, setExpandedPipelines] = useState<Set<number>>(new Set([0]))
+  
+  // Drag state
+  const [dragState, setDragState] = useState<{
+    pipelineIndex: number
+    stageIndex: number
+  } | null>(null)
+  const [dropTarget, setDropTarget] = useState<{
+    pipelineIndex: number
+    stageIndex: number
+  } | null>(null)
+  
+  const dragNodeRef = useRef<HTMLDivElement | null>(null)
 
   const toggleExpanded = (index: number) => {
     const newExpanded = new Set(expandedPipelines)
@@ -104,6 +117,71 @@ export function PipelineBuilder({
   const removePipeline = (index: number) => {
     const newSuggestions = suggestions.filter((_, i) => i !== index)
     onSuggestionsChange(newSuggestions)
+  }
+
+  // Drag and drop handlers
+  const handleDragStart = (e: React.DragEvent, pipelineIndex: number, stageIndex: number) => {
+    setDragState({ pipelineIndex, stageIndex })
+    dragNodeRef.current = e.currentTarget as HTMLDivElement
+    
+    // Add slight delay for visual feedback
+    setTimeout(() => {
+      if (dragNodeRef.current) {
+        dragNodeRef.current.style.opacity = '0.5'
+      }
+    }, 0)
+    
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', '') // Required for Firefox
+  }
+
+  const handleDragOver = (e: React.DragEvent, pipelineIndex: number, stageIndex: number) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    
+    // Only allow dropping within same pipeline
+    if (dragState && dragState.pipelineIndex === pipelineIndex) {
+      setDropTarget({ pipelineIndex, stageIndex })
+    }
+  }
+
+  const handleDragLeave = () => {
+    // Don't clear immediately to prevent flickering
+  }
+
+  const handleDrop = (e: React.DragEvent, pipelineIndex: number, stageIndex: number) => {
+    e.preventDefault()
+    
+    if (!dragState || dragState.pipelineIndex !== pipelineIndex) {
+      setDragState(null)
+      setDropTarget(null)
+      return
+    }
+
+    const fromIndex = dragState.stageIndex
+    const toIndex = stageIndex
+
+    if (fromIndex !== toIndex) {
+      // Optimistically reorder stages
+      const newSuggestions = [...suggestions]
+      const stages = [...newSuggestions[pipelineIndex].stages]
+      const [movedStage] = stages.splice(fromIndex, 1)
+      stages.splice(toIndex, 0, movedStage)
+      newSuggestions[pipelineIndex] = { ...newSuggestions[pipelineIndex], stages }
+      onSuggestionsChange(newSuggestions)
+    }
+
+    setDragState(null)
+    setDropTarget(null)
+  }
+
+  const handleDragEnd = () => {
+    if (dragNodeRef.current) {
+      dragNodeRef.current.style.opacity = '1'
+    }
+    setDragState(null)
+    setDropTarget(null)
+    dragNodeRef.current = null
   }
 
   return (
@@ -192,41 +270,77 @@ export function PipelineBuilder({
             {expandedPipelines.has(pIndex) && (
               <CardContent className="pt-3">
                 <p className="text-xs text-muted-foreground mb-3">
-                  Edit the stage names below, or use the defaults. All pipelines will be created in your Keap account.
+                  Drag stages to reorder. Edit names or use the defaults. All pipelines will be created in your Keap account.
                 </p>
                 
-                <div className="space-y-2">
-                  {pipeline.stages.map((stage, sIndex) => (
-                    <div 
-                      key={sIndex} 
-                      className="flex items-center gap-2 p-2 rounded-md bg-muted/20 group"
-                    >
-                      <GripVertical className="w-4 h-4 text-muted-foreground/50 flex-shrink-0 cursor-grab" />
-                      <div className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-medium flex-shrink-0">
-                        {sIndex + 1}
+                <div className="space-y-1">
+                  {pipeline.stages.map((stage, sIndex) => {
+                    const isDragging = dragState?.pipelineIndex === pIndex && dragState?.stageIndex === sIndex
+                    const isDropTarget = dropTarget?.pipelineIndex === pIndex && dropTarget?.stageIndex === sIndex
+                    const showDropIndicator = isDropTarget && dragState && dragState.stageIndex !== sIndex
+                    
+                    return (
+                      <div key={sIndex}>
+                        {/* Drop indicator above */}
+                        {showDropIndicator && dragState.stageIndex > sIndex && (
+                          <div className="h-1 bg-primary rounded-full mx-2 mb-1 animate-pulse" />
+                        )}
+                        
+                        <div 
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, pIndex, sIndex)}
+                          onDragOver={(e) => handleDragOver(e, pIndex, sIndex)}
+                          onDragLeave={handleDragLeave}
+                          onDrop={(e) => handleDrop(e, pIndex, sIndex)}
+                          onDragEnd={handleDragEnd}
+                          className={cn(
+                            "flex items-center gap-2 p-2 rounded-md bg-muted/20 group transition-all",
+                            isDragging && "opacity-50 scale-[0.98] shadow-lg ring-2 ring-primary/50",
+                            isDropTarget && !isDragging && "bg-primary/10"
+                          )}
+                        >
+                          <GripVertical 
+                            className={cn(
+                              "w-4 h-4 text-muted-foreground/50 flex-shrink-0 cursor-grab active:cursor-grabbing",
+                              "hover:text-muted-foreground transition-colors"
+                            )} 
+                          />
+                          <div className={cn(
+                            "w-6 h-6 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-medium flex-shrink-0",
+                            "transition-transform",
+                            isDragging && "scale-110"
+                          )}>
+                            {sIndex + 1}
+                          </div>
+                          
+                          {/* Stage selector with search & create */}
+                          <StageSelector
+                            value={stage}
+                            onChange={(value) => updateStageName(pIndex, sIndex, value)}
+                            onCreateStage={onStageCreated}
+                            availableStages={availableStages}
+                            placeholder="Select or type stage name..."
+                            className="flex-1"
+                          />
+                          
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive flex-shrink-0"
+                            onClick={() => removeStage(pIndex, sIndex)}
+                            disabled={pipeline.stages.length <= 1}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+                        
+                        {/* Drop indicator below */}
+                        {showDropIndicator && dragState.stageIndex < sIndex && (
+                          <div className="h-1 bg-primary rounded-full mx-2 mt-1 animate-pulse" />
+                        )}
                       </div>
-                      
-                      {/* Stage selector with search & create */}
-                      <StageSelector
-                        value={stage}
-                        onChange={(value) => updateStageName(pIndex, sIndex, value)}
-                        onCreateStage={onStageCreated}
-                        availableStages={availableStages}
-                        placeholder="Select or type stage name..."
-                        className="flex-1"
-                      />
-                      
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive flex-shrink-0"
-                        onClick={() => removeStage(pIndex, sIndex)}
-                        disabled={pipeline.stages.length <= 1}
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  ))}
+                    )
+                  })}
                   
                   <Button 
                     variant="ghost" 
