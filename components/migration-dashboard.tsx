@@ -12,8 +12,11 @@ import {
   ArrowRight,
   CheckCircle2,
   RefreshCw,
-  LogIn
+  LogIn,
+  ExternalLink
 } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Badge } from "@/components/ui/badge"
 import { OpportunitiesPanel, Opportunity } from "./opportunities-panel"
 import { PipelineBuilder, PipelineSuggestion } from "./pipeline-builder"
 import { FieldMapper, FieldMappingConfig } from "./field-mapper"
@@ -46,7 +49,35 @@ export function MigrationDashboard() {
   // Field mapping config - persisted across tab switches
   const [fieldMappingConfig, setFieldMappingConfig] = useState<FieldMappingConfig | null>(null)
   
+  // JSON data modal
+  const [jsonModalOpen, setJsonModalOpen] = useState(false)
+  const [jsonModalData, setJsonModalData] = useState<{
+    title: string
+    count: number
+    total: number
+    data: any[]
+  } | null>(null)
+  
   const { toast } = useToast()
+  
+  const openJsonModal = (type: "opportunities" | "pipelines") => {
+    if (type === "opportunities") {
+      setJsonModalData({
+        title: "Opportunities",
+        count: Math.min(opportunities.length, 20),
+        total: opportunities.length,
+        data: opportunities.slice(0, 20)
+      })
+    } else {
+      setJsonModalData({
+        title: "Pipelines",
+        count: pipelines.length,
+        total: pipelines.length,
+        data: pipelines
+      })
+    }
+    setJsonModalOpen(true)
+  }
   
   // Handle authentication errors
   const handleAuthError = async () => {
@@ -384,18 +415,38 @@ export function MigrationDashboard() {
         </Alert>
       )}
       
-      {/* Stats */}
+      {/* Stats - Clickable cards show JSON data */}
       <div className="grid grid-cols-3 gap-4">
-        <Card>
+        <Card 
+          className="cursor-pointer hover:bg-muted/50 transition-colors group"
+          onClick={() => openJsonModal("opportunities")}
+        >
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{opportunities.length}</div>
-            <p className="text-sm text-muted-foreground">Opportunities</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-2xl font-bold">
+                  {opportunities.length > 100 ? "100+" : opportunities.length}
+                </div>
+                <p className="text-sm text-muted-foreground">Opportunities</p>
+              </div>
+              <ExternalLink className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card 
+          className="cursor-pointer hover:bg-muted/50 transition-colors group"
+          onClick={() => openJsonModal("pipelines")}
+        >
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{pipelines.length}</div>
-            <p className="text-sm text-muted-foreground">Existing Pipelines</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-2xl font-bold">
+                  {pipelines.length > 100 ? "100+" : pipelines.length}
+                </div>
+                <p className="text-sm text-muted-foreground">Existing Pipelines</p>
+              </div>
+              <ExternalLink className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
           </CardContent>
         </Card>
         <Card>
@@ -582,6 +633,33 @@ export function MigrationDashboard() {
         </Card>
       </div>
 
+      {/* JSON Data Modal */}
+      <Dialog open={jsonModalOpen} onOpenChange={setJsonModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-green-500" />
+              {jsonModalData?.title}
+              <Badge variant="secondary" className="ml-2">
+                {jsonModalData?.count} shown of {jsonModalData?.total} total
+              </Badge>
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-auto">
+            <div className="space-y-3">
+              {jsonModalData && jsonModalData.total > 20 && (
+                <p className="text-xs text-muted-foreground bg-muted/50 px-3 py-2 rounded">
+                  ℹ️ Showing first 20 of {jsonModalData.total} records. The full data is used in the dashboard.
+                </p>
+              )}
+              <pre className="text-xs bg-muted/50 p-4 rounded-lg overflow-auto max-h-[50vh] font-mono">
+                {JSON.stringify(jsonModalData?.data, null, 2)}
+              </pre>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

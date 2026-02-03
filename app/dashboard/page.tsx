@@ -1,8 +1,7 @@
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
-import { CheckCircle2, LogOut, AlertCircle } from "lucide-react"
-import { MigrationDashboard } from "@/components/migration-dashboard"
-import { ApiTestPanel } from "@/components/api-test-panel"
+import { AlertCircle } from "lucide-react"
+import { DashboardContent } from "@/components/dashboard-content"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
@@ -50,39 +49,5 @@ export default async function DashboardPage({
     redirect("/auth/signin")
   }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
-      {/* Header */}
-      <header className="border-b bg-background/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <CheckCircle2 className="w-5 h-5 text-green-500" />
-            <span className="text-sm font-medium">Connected to Keap</span>
-          </div>
-          <a href="/api/auth/logout">
-            <Button variant="ghost" size="sm">
-              <LogOut className="w-4 h-4 mr-2" />
-              Disconnect
-            </Button>
-          </a>
-        </div>
-      </header>
-
-      <div className="container mx-auto px-4 py-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold">Pipeline Migration Dashboard</h1>
-            <p className="text-muted-foreground mt-1">
-              Analyze opportunities, build pipelines with AI, and migrate deals
-            </p>
-          </div>
-
-          {/* API Test Panel */}
-          <ApiTestPanel />
-
-          <MigrationDashboard />
-        </div>
-      </div>
-    </div>
-  )
+  return <DashboardContent />
 }
