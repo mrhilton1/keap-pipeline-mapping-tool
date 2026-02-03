@@ -18,7 +18,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { ChevronLeft, ChevronRight, User, DollarSign, FileText, Calendar } from "lucide-react"
+import { ChevronLeft, ChevronRight, User, DollarSign, FileText, Calendar, FolderOpen, Hammer, ArrowLeft } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { OpportunitiesPanel, Opportunity } from "./opportunities-panel"
 import { PipelineBuilder, PipelineSuggestion } from "./pipeline-builder"
@@ -49,6 +49,9 @@ export function MigrationDashboard() {
   
   const [activeTab, setActiveTab] = useState("build")
   const [createdPipelines, setCreatedPipelines] = useState<Pipeline[]>([])
+  
+  // Pipeline mode: null = choice not made, "existing" = use existing, "build" = build new
+  const [pipelineMode, setPipelineMode] = useState<"existing" | "build" | null>(null)
   
   // Field mapping config - persisted across tab switches
   const [fieldMappingConfig, setFieldMappingConfig] = useState<FieldMappingConfig | null>(null)
@@ -83,6 +86,8 @@ export function MigrationDashboard() {
   const [pipelineOutcomes, setPipelineOutcomes] = useState<Record<string, "OPEN" | "WON" | "LOST">>({})
   const [selectedPipelineForOutcomes, setSelectedPipelineForOutcomes] = useState<Pipeline | null>(null)
   const [outcomesConfigured, setOutcomesConfigured] = useState(false)
+  // Cache outcomes per pipeline to avoid re-fetching
+  const [outcomesCache, setOutcomesCache] = useState<Record<string, Record<string, "OPEN" | "WON" | "LOST">>>({})
   
   // Migration preview modal - enhanced with individual opportunity details
   const [previewModalOpen, setPreviewModalOpen] = useState(false)
@@ -228,12 +233,31 @@ export function MigrationDashboard() {
       }
 
       const opps = oppData.opportunities || []
+      const loadedPipelines = pipelineData.pipelines || []
       setOpportunities(opps)
-      setPipelines(pipelineData.pipelines || [])
+      setPipelines(loadedPipelines)
       
       // Extract unique stages for the stage selector
       const stages = extractUniqueStages(opps)
       setAvailableStages(stages)
+      
+      // Prefetch outcomes for all pipelines in the background
+      if (loadedPipelines.length > 0) {
+        loadedPipelines.forEach((pipeline: Pipeline) => {
+          // Fire and forget - don't await
+          fetch(`/api/pipelines/${pipeline.id}/outcomes`)
+            .then(res => res.json())
+            .then(data => {
+              const outcomeMap: Record<string, "OPEN" | "WON" | "LOST"> = {}
+              pipeline.stages?.forEach(stage => {
+                const outcome = data.outcomes?.find((o: any) => o.stage_id === stage.id)
+                outcomeMap[stage.id] = outcome?.outcome_type || "OPEN"
+              })
+              setOutcomesCache(prev => ({ ...prev, [pipeline.id]: outcomeMap }))
+            })
+            .catch(() => {})  // Silently ignore prefetch errors
+        })
+      }
       
       // Create default pipeline with all unique stages (only on first load)
       if (!defaultPipelineCreated && stages.length > 0) {
@@ -353,43 +377,62 @@ export function MigrationDashboard() {
     setCreating(false)
   }
 
-  // Check pipeline outcomes and show config modal if needed
-  const checkPipelineOutcomes = async (pipeline: Pipeline) => {
+  // Prefetch outcomes for a pipeline and cache them
+  const prefetchPipelineOutcomes = async (pipeline: Pipeline): Promise<Record<string, "OPEN" | "WON" | "LOST">> => {
+    // Check cache first
+    if (outcomesCache[pipeline.id]) {
+      return outcomesCache[pipeline.id]
+    }
+    
     try {
       const response = await fetch(`/api/pipelines/${pipeline.id}/outcomes`)
       const data = await response.json()
       
-      if (data.outcomes && data.outcomes.length > 0) {
-        // Pipeline has outcomes configured - use them
-        const outcomeMap: Record<string, "OPEN" | "WON" | "LOST"> = {}
-        pipeline.stages?.forEach(stage => {
-          const outcome = data.outcomes.find((o: any) => o.stage_id === stage.id)
-          outcomeMap[stage.id] = outcome?.outcome_type || "OPEN"
-        })
-        setPipelineOutcomes(outcomeMap)
-        setOutcomesConfigured(true)
-        computeMigrationPreview(pipeline, outcomeMap)
-      } else {
-        // No outcomes - show config modal
-        setSelectedPipelineForOutcomes(pipeline)
-        // Initialize all stages as OPEN
-        const defaultOutcomes: Record<string, "OPEN" | "WON" | "LOST"> = {}
-        pipeline.stages?.forEach(stage => {
-          defaultOutcomes[stage.id] = "OPEN"
-        })
-        setPipelineOutcomes(defaultOutcomes)
-        setOutcomesConfigured(false)
-        setOutcomesModalOpen(true)
-      }
-    } catch (err) {
-      console.error("Failed to fetch outcomes:", err)
-      // Default all to OPEN and proceed
+      const outcomeMap: Record<string, "OPEN" | "WON" | "LOST"> = {}
+      pipeline.stages?.forEach(stage => {
+        const outcome = data.outcomes?.find((o: any) => o.stage_id === stage.id)
+        outcomeMap[stage.id] = outcome?.outcome_type || "OPEN"
+      })
+      
+      // Cache the result
+      setOutcomesCache(prev => ({ ...prev, [pipeline.id]: outcomeMap }))
+      return outcomeMap
+    } catch {
+      // Default all to OPEN
       const defaultOutcomes: Record<string, "OPEN" | "WON" | "LOST"> = {}
       pipeline.stages?.forEach(stage => {
         defaultOutcomes[stage.id] = "OPEN"
       })
-      setPipelineOutcomes(defaultOutcomes)
-      computeMigrationPreview(pipeline, defaultOutcomes)
+      return defaultOutcomes
+    }
+  }
+  
+  // Check pipeline outcomes and show config modal if not yet configured
+  const checkPipelineOutcomes = async (pipeline: Pipeline) => {
+    // Check if we already have user-configured outcomes for this pipeline
+    if (outcomesCache[pipeline.id] && outcomesConfigured && selectedPipelineForOutcomes?.id === pipeline.id) {
+      // Use cached/configured outcomes directly
+      computeMigrationPreview(pipeline, outcomesCache[pipeline.id])
+      return
+    }
+    
+    const outcomes = await prefetchPipelineOutcomes(pipeline)
+    
+    // Check if outcomes were actually configured in Keap (not just defaults)
+    const hasConfiguredOutcomes = Object.values(outcomes).some(v => v === "WON" || v === "LOST")
+    
+    if (hasConfiguredOutcomes) {
+      // Pipeline has outcomes configured - use them
+      setPipelineOutcomes(outcomes)
+      setOutcomesConfigured(true)
+      setSelectedPipelineForOutcomes(pipeline)
+      computeMigrationPreview(pipeline, outcomes)
+    } else {
+      // No outcomes configured - show config modal
+      setSelectedPipelineForOutcomes(pipeline)
+      setPipelineOutcomes(outcomes)
+      setOutcomesConfigured(false)
+      setOutcomesModalOpen(true)
     }
   }
   
@@ -411,13 +454,14 @@ export function MigrationDashboard() {
 
   // Compute migration preview for a pipeline
   const computeMigrationPreview = (pipeline: Pipeline, outcomes: Record<string, "OPEN" | "WON" | "LOST"> = pipelineOutcomes) => {
+    console.log("[Preview] Computing with outcomes:", outcomes)
     const stageConfig = fieldMappingConfig?.stageMapping
     const selectedOpps = opportunities.filter(o => selectedOpportunities.has(o.id))
     
-    // Check if we have smart stage mapping configured for this pipeline
-    const useSmartStageMapping = stageConfig?.pipelineId === pipeline.id && 
-                                  stageConfig?.perStageMappings && 
-                                  stageConfig.perStageMappings.length > 0
+    // Check if we have explicit smart stage mapping configured for this pipeline
+    const hasExplicitStageMapping = stageConfig?.pipelineId === pipeline.id && 
+                                     stageConfig?.perStageMappings && 
+                                     stageConfig.perStageMappings.length > 0
     
     const stageMappingsMap = new Map<string, { stageName: string; stageId: string; count: number; isAutoMatched: boolean; status: "OPEN" | "WON" | "LOST" }>()
     const skippedOpps: Array<{ id: string; title: string; stageName: string | null }> = []
@@ -431,14 +475,29 @@ export function MigrationDashboard() {
       noteCount: number
     }> = []
     
+    // Helper: find matching stage by name (case-insensitive)
+    const findMatchingStage = (oppStageName: string | null) => {
+      console.log(`[Preview] findMatchingStage called with: "${oppStageName}"`)
+      console.log(`[Preview] Pipeline stages:`, pipeline.stages?.map(s => s.name))
+      if (!oppStageName || !pipeline.stages) {
+        console.log(`[Preview] No match: oppStageName=${oppStageName}, hasStages=${!!pipeline.stages}`)
+        return null
+      }
+      const match = pipeline.stages.find(
+        s => s.name.toLowerCase() === oppStageName.toLowerCase()
+      )
+      console.log(`[Preview] Match result:`, match ? match.name : "NO MATCH")
+      return match
+    }
+    
     for (const opp of selectedOpps) {
       const oppStageName = opp.stage?.name || null
       let targetStageId: string | null = null
       let targetStageName: string | null = null
       let isAutoMatched = false
       
-      if (useSmartStageMapping && stageConfig) {
-        // Use smart mapping
+      if (hasExplicitStageMapping && stageConfig) {
+        // Use explicit smart mapping from field mapper
         const mapping = stageConfig.perStageMappings.find(
           m => oppStageName && m.opportunityStageName.toLowerCase() === oppStageName.toLowerCase()
         )
@@ -453,12 +512,22 @@ export function MigrationDashboard() {
           isAutoMatched = false
         }
       } else {
-        // Use first stage of pipeline (legacy behavior)
-        const firstStage = pipeline.stages?.[0]
-        if (firstStage) {
-          targetStageId = firstStage.id
-          targetStageName = firstStage.name
-          isAutoMatched = false
+        // Auto-match by stage name first, then fall back to first stage
+        const matchedStage = findMatchingStage(oppStageName)
+        if (matchedStage) {
+          targetStageId = matchedStage.id
+          targetStageName = matchedStage.name
+          isAutoMatched = true
+          console.log(`[Preview] Auto-matched "${oppStageName}" → "${matchedStage.name}"`)
+        } else {
+          // No match - use first stage as fallback
+          const firstStage = pipeline.stages?.[0]
+          if (firstStage) {
+            targetStageId = firstStage.id
+            targetStageName = firstStage.name
+            isAutoMatched = false
+            console.log(`[Preview] No match for "${oppStageName}", using fallback: "${firstStage.name}"`)
+          }
         }
       }
       
@@ -512,8 +581,15 @@ export function MigrationDashboard() {
   // Confirm outcomes and proceed to preview
   const confirmOutcomes = () => {
     if (selectedPipelineForOutcomes) {
+      // Cache the user's outcome configuration
+      setOutcomesCache(prev => ({ 
+        ...prev, 
+        [selectedPipelineForOutcomes.id]: { ...pipelineOutcomes } 
+      }))
       setOutcomesConfigured(true)
       setOutcomesModalOpen(false)
+      // Pass the current pipelineOutcomes state directly
+      console.log("[Confirm Outcomes] Using outcomes:", pipelineOutcomes)
       computeMigrationPreview(selectedPipelineForOutcomes, pipelineOutcomes)
     }
   }
@@ -553,15 +629,16 @@ export function MigrationDashboard() {
       console.log("[Migration] Field mapping config:", fieldMappingConfig)
       console.log("[Migration] Using currency:", currency)
       
+      // Find the pipeline we're migrating to
+      const targetPipeline = pipelines.find(p => p.id === pipelineId)
+      
       // Helper function to get stage ID and status for an opportunity
       const getStageInfoForOpportunity = (opp: Opportunity): { stageId: string; status: "OPEN" | "WON" | "LOST" } | null => {
         let targetStageId: string | null = null
+        const oppStageName = opp.stage?.name
         
-        if (!useSmartStageMapping || !stageConfig) {
-          // Legacy: use single stage ID
-          targetStageId = stageConfig?.stageId || stageId
-        } else {
-          const oppStageName = opp.stage?.name
+        if (useSmartStageMapping && stageConfig) {
+          // Use explicit smart mapping from field mapper
           if (!oppStageName) {
             // No stage on opportunity, use fallback
             targetStageId = stageConfig.fallbackStageId || null
@@ -571,6 +648,23 @@ export function MigrationDashboard() {
               m => m.opportunityStageName.toLowerCase() === oppStageName.toLowerCase()
             )
             targetStageId = mapping?.targetStageId || stageConfig.fallbackStageId || null
+          }
+        } else {
+          // Auto-match by stage name (case-insensitive)
+          if (oppStageName && targetPipeline?.stages) {
+            const matchedStage = targetPipeline.stages.find(
+              s => s.name.toLowerCase() === oppStageName.toLowerCase()
+            )
+            if (matchedStage) {
+              targetStageId = matchedStage.id
+              console.log(`[Migration] Auto-matched "${oppStageName}" → "${matchedStage.name}"`)
+            }
+          }
+          
+          // Fallback to the passed stageId (first stage)
+          if (!targetStageId) {
+            targetStageId = stageId
+            console.log(`[Migration] No auto-match for "${oppStageName}", using fallback stage`)
           }
         }
         
@@ -888,7 +982,7 @@ export function MigrationDashboard() {
             <TabsContent value="migrate" className="mt-0">
               <div className="grid lg:grid-cols-2 gap-6">
                 {/* Left: Opportunities Panel */}
-                <div className="h-[600px] flex flex-col border rounded-lg">
+                <div className="h-[calc(100vh-280px)] min-h-[600px] flex flex-col border rounded-lg">
                   <div className="p-4 border-b flex items-center justify-between">
                     <div>
                       <h3 className="font-semibold">Source Opportunities</h3>
