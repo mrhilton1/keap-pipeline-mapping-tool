@@ -65,6 +65,17 @@ export function MigrationDashboard() {
   
   const { toast } = useToast()
   
+  // Handle custom stage creation - add to available stages list
+  const handleStageCreated = (stageName: string) => {
+    // Check if stage already exists
+    if (!availableStages.some(s => s.name.toLowerCase() === stageName.toLowerCase())) {
+      setAvailableStages(prev => [
+        { name: stageName, isCustom: true, count: 0 },
+        ...prev
+      ])
+    }
+  }
+  
   // Extract unique stages from opportunities and create default pipeline
   const extractUniqueStages = (opps: Opportunity[]): StageOption[] => {
     const stageMap = new Map<string, { order: number; count: number }>()
@@ -536,6 +547,7 @@ export function MigrationDashboard() {
                 isCreating={creating}
                 isAnalyzing={analyzing}
                 availableStages={availableStages}
+                onStageCreated={handleStageCreated}
               />
             </TabsContent>
 

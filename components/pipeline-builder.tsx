@@ -39,6 +39,7 @@ interface PipelineBuilderProps {
   isCreating: boolean
   isAnalyzing?: boolean
   availableStages: StageOption[]
+  onStageCreated?: (stageName: string) => void // Callback when a custom stage is created
 }
 
 export function PipelineBuilder({ 
@@ -48,7 +49,8 @@ export function PipelineBuilder({
   onAnalyzeWithAI,
   isCreating,
   isAnalyzing,
-  availableStages
+  availableStages,
+  onStageCreated
 }: PipelineBuilderProps) {
   const [expandedPipelines, setExpandedPipelines] = useState<Set<number>>(new Set([0]))
 
@@ -208,6 +210,7 @@ export function PipelineBuilder({
                       <StageSelector
                         value={stage}
                         onChange={(value) => updateStageName(pIndex, sIndex, value)}
+                        onCreateStage={onStageCreated}
                         availableStages={availableStages}
                         placeholder="Select or type stage name..."
                         className="flex-1"

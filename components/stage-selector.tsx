@@ -10,11 +10,13 @@ export interface StageOption {
   name: string
   order?: number
   count?: number // How many opportunities use this stage
+  isCustom?: boolean // Indicates this was created by user
 }
 
 interface StageSelectorProps {
   value: string
   onChange: (value: string) => void
+  onCreateStage?: (stageName: string) => void // Callback when a new stage is created
   availableStages: StageOption[]
   placeholder?: string
   className?: string
@@ -22,24 +24,38 @@ interface StageSelectorProps {
 
 export function StageSelector({ 
   value, 
-  onChange, 
+  onChange,
+  onCreateStage,
   availableStages,
   placeholder = "Select or create stage...",
   className
 }: StageSelectorProps) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState("")
+  const [openUpward, setOpenUpward] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // Check position and determine if dropdown should open upward
+  useEffect(() => {
+    if (open && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect()
+      const spaceBelow = window.innerHeight - rect.bottom
+      const spaceAbove = rect.top
+      const dropdownHeight = 240 // max-h-60 = 15rem = 240px
+      
+      // Open upward if not enough space below but enough above
+      setOpenUpward(spaceBelow < dropdownHeight && spaceAbove > dropdownHeight)
+    }
+  }, [open])
 
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
-        dropdownRef.current && 
-        !dropdownRef.current.contains(event.target as Node) &&
-        inputRef.current &&
-        !inputRef.current.contains(event.target as Node)
+        containerRef.current && 
+        !containerRef.current.contains(event.target as Node)
       ) {
         setOpen(false)
         setSearch("")
@@ -71,14 +87,19 @@ export function StageSelector({
 
   const handleCreate = () => {
     if (search.trim()) {
-      onChange(search.trim())
+      const newStageName = search.trim()
+      onChange(newStageName)
+      // Notify parent to add this to the available stages
+      if (onCreateStage) {
+        onCreateStage(newStageName)
+      }
       setOpen(false)
       setSearch("")
     }
   }
 
   return (
-    <div className={cn("relative", className)}>
+    <div ref={containerRef} className={cn("relative", className)}>
       <div className="relative">
         <Input
           ref={inputRef}
@@ -105,7 +126,10 @@ export function StageSelector({
       {open && (
         <div 
           ref={dropdownRef}
-          className="absolute z-50 top-full left-0 right-0 mt-1 bg-popover border rounded-md shadow-lg max-h-60 overflow-auto"
+          className={cn(
+            "absolute z-50 left-0 right-0 bg-popover border rounded-md shadow-lg max-h-60 overflow-auto",
+            openUpward ? "bottom-full mb-1" : "top-full mt-1"
+          )}
         >
           {/* Create custom option - always at top when searching */}
           {showCreateOption && (
@@ -138,6 +162,9 @@ export function StageSelector({
                 <div className="flex items-center gap-2">
                   {value === stage.name && <Check className="w-3 h-3 text-primary" />}
                   <span className={value === stage.name ? "font-medium" : ""}>{stage.name}</span>
+                  {stage.isCustom && (
+                    <span className="text-[10px] text-muted-foreground bg-muted px-1 rounded">custom</span>
+                  )}
                 </div>
                 {stage.count !== undefined && stage.count > 0 && (
                   <span className="text-xs text-muted-foreground">
