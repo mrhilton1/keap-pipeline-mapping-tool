@@ -426,18 +426,16 @@ export function MigrationDashboard() {
         </Card>
 
         {/* Right: Pipeline Builder / Migration */}
-        <Card className="h-[700px] flex flex-col">
-          <CardHeader className="flex-shrink-0 pb-2">
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <Card className="flex flex-col" style={{ minHeight: '700px' }}>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-1">
+            <CardHeader className="flex-shrink-0 pb-2">
               <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="build">Build Pipelines</TabsTrigger>
                 <TabsTrigger value="fields">Field Mapping</TabsTrigger>
                 <TabsTrigger value="migrate">Migrate Deals</TabsTrigger>
               </TabsList>
-            </Tabs>
-          </CardHeader>
-          <CardContent className="flex-1 overflow-hidden px-4 pb-4">
-            <Tabs value={activeTab} className="h-full flex flex-col">
+            </CardHeader>
+            <CardContent className="flex-1 overflow-auto px-4 pb-4">
               <TabsContent value="build" className="mt-0 flex-1 overflow-auto">
                 <div className="space-y-4 pr-2">
                   {/* AI Analyze Button */}
@@ -470,13 +468,12 @@ export function MigrationDashboard() {
               </TabsContent>
 
               <TabsContent value="fields" className="mt-0 flex-1 overflow-auto">
-                <div className="text-center py-8 text-muted-foreground">
-                  <p className="font-medium">Field Mapping</p>
-                  <p className="text-sm mt-2">See the full mapping interface below.</p>
-                  <p className="text-xs mt-4">
-                    Discovered {opportunities.length > 0 ? `fields from ${opportunities.length} opportunities` : 'no opportunities yet'}
-                  </p>
-                </div>
+                <FieldMapper 
+                  opportunities={opportunities} 
+                  pipelines={pipelines}
+                  savedConfig={fieldMappingConfig}
+                  onConfigChange={setFieldMappingConfig}
+                />
               </TabsContent>
 
               <TabsContent value="migrate" className="mt-0 flex-1 overflow-auto">
@@ -519,8 +516,21 @@ export function MigrationDashboard() {
                                   size="sm"
                                   onClick={() => {
                                     const firstStage = pipeline.stages?.[0]
+                                    console.log("[Migrate Button] Clicked for pipeline:", pipeline.name)
+                                    console.log("[Migrate Button] First stage:", firstStage)
+                                    console.log("[Migrate Button] Selected opportunities:", selectedOpportunities.size)
                                     if (firstStage) {
+                                      toast({
+                                        title: "Starting Migration",
+                                        description: `Creating ${selectedOpportunities.size} deals in ${pipeline.name}...`,
+                                      })
                                       migrateOpportunities(pipeline.id, firstStage.id)
+                                    } else {
+                                      toast({
+                                        title: "No Stages",
+                                        description: "This pipeline has no stages to migrate to.",
+                                        variant: "destructive"
+                                      })
                                     }
                                   }}
                                   disabled={migrating || !pipeline.stages?.length}
@@ -554,22 +564,11 @@ export function MigrationDashboard() {
                   )}
                 </div>
               </TabsContent>
-            </Tabs>
-          </CardContent>
+            </CardContent>
+          </Tabs>
         </Card>
       </div>
 
-      {/* Field Mapping Section - Full Width */}
-      {activeTab === "fields" && (
-        <div className="mt-6">
-          <FieldMapper 
-            opportunities={opportunities} 
-            pipelines={pipelines}
-            savedConfig={fieldMappingConfig}
-            onConfigChange={setFieldMappingConfig}
-          />
-        </div>
-      )}
     </div>
   )
 }
