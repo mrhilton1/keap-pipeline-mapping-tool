@@ -52,6 +52,8 @@ export function MigrationDashboard() {
   
   // Pipeline mode: null = choice not made, "existing" = use existing, "build" = build new
   const [pipelineMode, setPipelineMode] = useState<"existing" | "build" | null>(null)
+  // Selected target pipeline for migration
+  const [selectedTargetPipeline, setSelectedTargetPipeline] = useState<Pipeline | null>(null)
   
   // Field mapping config - persisted across tab switches
   const [fieldMappingConfig, setFieldMappingConfig] = useState<FieldMappingConfig | null>(null)
@@ -958,39 +960,84 @@ export function MigrationDashboard() {
             <TabsContent value="build" className="mt-0">
               {/* Show choice if there are existing pipelines and user hasn't chosen yet */}
               {pipelines.length > 0 && pipelineMode === null ? (
-                <div className="flex items-center justify-center py-12">
-                  <div className="flex gap-4">
-                    {/* Use Existing Pipelines */}
-                    <Card 
-                      className="cursor-pointer hover:border-primary hover:shadow-md transition-all w-48"
-                      onClick={() => {
-                        setPipelineMode("existing")
-                        setActiveTab("migrate")
-                      }}
-                    >
-                      <CardContent className="pt-6 pb-4 text-center">
-                        <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mx-auto mb-3">
-                          <FolderOpen className="w-5 h-5" />
+                <div className="max-w-md mx-auto py-8 space-y-6">
+                  {/* Use Existing Pipeline - with dropdown */}
+                  <Card className="overflow-hidden">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center flex-shrink-0">
+                          <FolderOpen className="w-4 h-4" />
                         </div>
-                        <h4 className="font-medium text-sm">Use Existing</h4>
-                        <p className="text-xs text-muted-foreground mt-1">{pipelines.length} pipelines</p>
-                      </CardContent>
-                    </Card>
-                    
-                    {/* Build New Pipelines */}
-                    <Card 
-                      className="cursor-pointer hover:border-primary hover:shadow-md transition-all w-48"
-                      onClick={() => setPipelineMode("build")}
-                    >
-                      <CardContent className="pt-6 pb-4 text-center">
-                        <div className="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center mx-auto mb-3">
-                          <Hammer className="w-5 h-5" />
+                        <div className="flex-1">
+                          <h4 className="font-medium text-sm">Use Existing Pipeline</h4>
                         </div>
-                        <h4 className="font-medium text-sm">Build New</h4>
-                        <p className="text-xs text-muted-foreground mt-1">{availableStages.length} stages</p>
-                      </CardContent>
-                    </Card>
+                      </div>
+                      <Select
+                        value={selectedTargetPipeline?.id || ""}
+                        onValueChange={(id) => {
+                          const pipeline = pipelines.find(p => p.id === id)
+                          setSelectedTargetPipeline(pipeline || null)
+                        }}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select a pipeline..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {pipelines.map(p => (
+                            <SelectItem key={p.id} value={p.id}>
+                              <span className="flex items-center gap-2">
+                                {p.name}
+                                <span className="text-xs text-muted-foreground">
+                                  ({p.stages?.length || 0} stages)
+                                </span>
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {selectedTargetPipeline && (
+                        <Button 
+                          className="w-full mt-3" 
+                          onClick={() => {
+                            setPipelineMode("existing")
+                            setActiveTab("fields")
+                          }}
+                        >
+                          Continue to Field Mapping
+                          <ArrowRight className="w-4 h-4 ml-2" />
+                        </Button>
+                      )}
+                    </CardContent>
+                  </Card>
+                  
+                  {/* Divider */}
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t" />
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-background px-2 text-muted-foreground">or</span>
+                    </div>
                   </div>
+                  
+                  {/* Build New Pipelines */}
+                  <Card 
+                    className="cursor-pointer hover:border-primary hover:shadow-md transition-all"
+                    onClick={() => setPipelineMode("build")}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center flex-shrink-0">
+                          <Hammer className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-medium text-sm">Build New Pipeline</h4>
+                          <p className="text-xs text-muted-foreground">{availableStages.length} stages from opportunities</p>
+                        </div>
+                        <ArrowRight className="w-4 h-4 text-muted-foreground" />
+                      </div>
+                    </CardContent>
+                  </Card>
                 </div>
               ) : (
                 <>
@@ -1026,6 +1073,7 @@ export function MigrationDashboard() {
               <FieldMapper 
                 opportunities={opportunities} 
                 pipelines={pipelines}
+                initialPipeline={selectedTargetPipeline}
                 savedConfig={fieldMappingConfig}
                 onConfigChange={setFieldMappingConfig}
               />

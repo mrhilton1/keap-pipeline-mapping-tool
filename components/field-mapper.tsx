@@ -188,12 +188,14 @@ export interface FieldMappingConfig {
 interface FieldMapperProps {
   opportunities: Opportunity[]
   pipelines?: Pipeline[]
+  // Optional: pre-select a pipeline (from "Use Existing" flow)
+  initialPipeline?: Pipeline | null
   // Optional: pass in saved config to persist across tab switches
   savedConfig?: FieldMappingConfig | null
   onConfigChange?: (config: FieldMappingConfig) => void
 }
 
-export function FieldMapper({ opportunities, pipelines: propPipelines, savedConfig, onConfigChange }: FieldMapperProps) {
+export function FieldMapper({ opportunities, pipelines: propPipelines, initialPipeline, savedConfig, onConfigChange }: FieldMapperProps) {
   const [customFields, setCustomFields] = useState<DealField[]>([])
   const [mappings, setMappings] = useState<FieldMapping[]>(savedConfig?.mappings || [])
   const [loading, setLoading] = useState(true)
@@ -242,6 +244,22 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, savedConf
       onConfigChange({ mappings, stageMapping, ownerMapping })
     }
   }, [mappings, stageMapping, ownerMapping, configLoaded, onConfigChange])
+  
+  // Pre-select pipeline if passed from parent (Use Existing flow)
+  useEffect(() => {
+    if (initialPipeline && !stageMapping.pipelineId) {
+      // Auto-select the pipeline and compute smart stage mapping
+      setStageMapping({
+        pipelineId: initialPipeline.id,
+        pipelineName: initialPipeline.name,
+        stageId: null,
+        stageName: null,
+        perStageMappings: [],
+        fallbackStageId: null,
+        fallbackStageName: null
+      })
+    }
+  }, [initialPipeline])
   
   // Create field dialog
   const [showCreateDialog, setShowCreateDialog] = useState(false)
