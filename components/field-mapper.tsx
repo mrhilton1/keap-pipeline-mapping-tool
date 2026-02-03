@@ -85,7 +85,6 @@ const FIELD_TYPES = [
 const STANDARD_DEAL_FIELDS: DealField[] = [
   { name: "name", label: "Deal Name", type: "TEXT", isCustom: false },
   { name: "value.amount", label: "Value (Amount)", type: "NUMBER", isCustom: false },
-  { name: "value.average", label: "Value (Average)", type: "NUMBER", isCustom: false }, // Special: averages low & high
   { name: "value.currency", label: "Value (Currency)", type: "TEXT", isCustom: false },
   { name: "contacts.id", label: "Primary Contact (1:1)", type: "REF", isCustom: false },
   { name: "owner_id", label: "Keep Original Owner (1:1)", type: "REF", isCustom: false },
@@ -95,6 +94,7 @@ const STANDARD_DEAL_FIELDS: DealField[] = [
 
 // Special mapping targets that require different handling
 const SPECIAL_DEAL_FIELDS: DealField[] = [
+  { name: "value.average", label: "Value (Average)", type: "NUMBER", isCustom: false }, // Averages low & high revenue
   { name: "_deal_notes", label: "Add as Deal Note", type: "LONG_TEXT", isCustom: false },
   { name: "_stage_mapping", label: "Assign ALL to Pipeline/Stage", type: "STAGE", isCustom: false },
   { name: "_owner_mapping", label: "Assign ALL to Same Owner", type: "USER", isCustom: false },
