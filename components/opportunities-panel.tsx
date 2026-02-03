@@ -5,24 +5,59 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { DollarSign, User, Search } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { 
+  DollarSign, 
+  User, 
+  Search, 
+  ChevronDown, 
+  ChevronRight,
+  Calendar,
+  Building,
+  Mail,
+  Phone,
+  FileText,
+  Clock
+} from "lucide-react"
 
 export interface Opportunity {
   id: string
   opportunity_title: string
+  opportunity_notes?: string
+  next_action_notes?: string
   contact?: {
     id?: string
     first_name?: string
     last_name?: string
     email?: string
+    phone_number?: string
+    company_name?: string
+    job_title?: string
   }
   projected_revenue_high?: number
   projected_revenue_low?: number
+  estimated_close_date?: string
   stage?: {
     id: string
     name: string
+    details?: {
+      probability?: number
+      stage_order?: number
+      target_num_days?: number
+    }
   }
+  user?: {
+    id: number
+    first_name?: string
+    last_name?: string
+  }
+  next_action_date?: string
+  date_created?: string
   last_updated?: string
+  custom_fields?: Array<{
+    id: number
+    content: any
+  }>
 }
 
 interface OpportunitiesPanelProps {
@@ -40,6 +75,23 @@ export function OpportunitiesPanel({
 }: OpportunitiesPanelProps) {
   const [searchTerm, setSearchTerm] = useState("")
   const [stageFilter, setStageFilter] = useState<string | null>(null)
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+
+  const toggleExpanded = (id: string) => {
+    const newExpanded = new Set(expandedIds)
+    if (newExpanded.has(id)) {
+      newExpanded.delete(id)
+    } else {
+      newExpanded.add(id)
+    }
+    setExpandedIds(newExpanded)
+  }
+
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr) return null
+    const date = new Date(dateStr)
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  }
 
   // Get unique stages for filter
   const stages = Array.from(new Set(opportunities.map(o => o.stage?.name).filter(Boolean)))
@@ -180,19 +232,25 @@ export function OpportunitiesPanel({
           ) : (
             filtered.map(opp => {
               const isSelected = selectedIds.has(opp.id)
+              const isExpanded = expandedIds.has(opp.id)
               const revenue = formatRevenue(opp)
               const contact = formatContact(opp)
+              const estimatedClose = formatDate(opp.estimated_close_date)
+              const lastUpdated = formatDate(opp.last_updated)
               
               return (
                 <Card 
                   key={opp.id} 
-                  className={`cursor-pointer transition-colors ${
-                    isSelected ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'
+                  className={`transition-colors ${
+                    isSelected ? 'border-primary bg-primary/5' : 'hover:bg-muted/30'
                   }`}
-                  onClick={() => handleSelectOne(opp.id, !isSelected)}
                 >
-                  <CardContent className="p-3">
-                    <div className="flex items-start gap-3">
+                  <CardContent className="p-0">
+                    {/* Main row - always visible */}
+                    <div 
+                      className="flex items-start gap-3 p-3 cursor-pointer"
+                      onClick={() => handleSelectOne(opp.id, !isSelected)}
+                    >
                       <Checkbox
                         checked={isSelected}
                         onCheckedChange={(checked) => handleSelectOne(opp.id, checked as boolean)}
@@ -201,32 +259,161 @@ export function OpportunitiesPanel({
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-2">
-                          <h4 className="font-medium text-sm truncate">
+                          <h4 className="font-medium text-sm">
                             {opp.opportunity_title}
                           </h4>
-                          {opp.stage && (
-                            <Badge variant="secondary" className="flex-shrink-0 text-xs">
-                              {opp.stage.name}
-                            </Badge>
-                          )}
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            {opp.stage && (
+                              <Badge 
+                                variant="secondary" 
+                                className="text-xs"
+                              >
+                                {opp.stage.name}
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                         
-                        <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                        {/* Quick info row */}
+                        <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground flex-wrap">
                           {contact && (
-                            <span className="flex items-center gap-1 truncate">
+                            <span className="flex items-center gap-1">
                               <User className="w-3 h-3" />
                               {contact}
                             </span>
                           )}
+                          {opp.contact?.company_name && (
+                            <span className="flex items-center gap-1">
+                              <Building className="w-3 h-3" />
+                              {opp.contact.company_name}
+                            </span>
+                          )}
                           {revenue && (
-                            <span className="flex items-center gap-1 flex-shrink-0">
+                            <span className="flex items-center gap-1">
                               <DollarSign className="w-3 h-3" />
                               {revenue}
                             </span>
                           )}
                         </div>
                       </div>
+                      
+                      {/* Expand button */}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 flex-shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          toggleExpanded(opp.id)
+                        }}
+                      >
+                        {isExpanded ? (
+                          <ChevronDown className="w-4 h-4" />
+                        ) : (
+                          <ChevronRight className="w-4 h-4" />
+                        )}
+                      </Button>
                     </div>
+                    
+                    {/* Expanded details */}
+                    {isExpanded && (
+                      <div className="px-3 pb-3 pt-0 ml-8 border-t bg-muted/20">
+                        <div className="pt-3 space-y-2 text-xs">
+                          {/* Stage Details */}
+                          {opp.stage?.details && (
+                            <div className="flex items-center gap-4">
+                              {opp.stage.details.probability !== undefined && (
+                                <span className="text-muted-foreground">
+                                  Win probability: <span className="text-foreground font-medium">{opp.stage.details.probability}%</span>
+                                </span>
+                              )}
+                              {opp.stage.details.stage_order !== undefined && (
+                                <span className="text-muted-foreground">
+                                  Stage order: <span className="text-foreground font-medium">{opp.stage.details.stage_order}</span>
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          
+                          {/* Contact Details */}
+                          <div className="grid grid-cols-2 gap-2">
+                            {opp.contact?.email && (
+                              <div className="flex items-center gap-1.5 text-muted-foreground">
+                                <Mail className="w-3 h-3" />
+                                <a href={`mailto:${opp.contact.email}`} className="hover:text-primary truncate">
+                                  {opp.contact.email}
+                                </a>
+                              </div>
+                            )}
+                            {opp.contact?.phone_number && (
+                              <div className="flex items-center gap-1.5 text-muted-foreground">
+                                <Phone className="w-3 h-3" />
+                                <span>{opp.contact.phone_number}</span>
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Dates */}
+                          <div className="flex items-center gap-4 text-muted-foreground">
+                            {estimatedClose && (
+                              <span className="flex items-center gap-1.5">
+                                <Calendar className="w-3 h-3" />
+                                Est. close: {estimatedClose}
+                              </span>
+                            )}
+                            {lastUpdated && (
+                              <span className="flex items-center gap-1.5">
+                                <Clock className="w-3 h-3" />
+                                Updated: {lastUpdated}
+                              </span>
+                            )}
+                          </div>
+                          
+                          {/* Notes */}
+                          {opp.opportunity_notes && (
+                            <div className="mt-2 p-2 bg-background rounded border">
+                              <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
+                                <FileText className="w-3 h-3" />
+                                <span className="font-medium">Notes</span>
+                              </div>
+                              <p className="text-muted-foreground whitespace-pre-wrap line-clamp-3">
+                                {opp.opportunity_notes}
+                              </p>
+                            </div>
+                          )}
+                          
+                          {/* Custom Fields */}
+                          {opp.custom_fields && opp.custom_fields.length > 0 && (
+                            <div className="mt-2 p-2 bg-background rounded border">
+                              <div className="flex items-center gap-1.5 text-muted-foreground mb-2">
+                                <span className="font-medium">Custom Fields</span>
+                              </div>
+                              <div className="space-y-1">
+                                {opp.custom_fields.map((field, idx) => (
+                                  <div key={idx} className="flex items-center gap-2">
+                                    <Badge variant="outline" className="text-[10px] font-mono">
+                                      #{field.id}
+                                    </Badge>
+                                    <span className="text-muted-foreground">
+                                      {typeof field.content === 'object' 
+                                        ? JSON.stringify(field.content)
+                                        : String(field.content || '-')}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Assigned User */}
+                          {opp.user && (
+                            <div className="text-muted-foreground">
+                              Assigned to: <span className="text-foreground">{opp.user.first_name} {opp.user.last_name}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               )

@@ -7,20 +7,38 @@ export interface KeapTokens {
 export interface KeapOpportunity {
   id: string
   opportunity_title: string
+  opportunity_notes?: string
+  next_action_notes?: string
   contact?: {
     id: string
     first_name?: string
     last_name?: string
     email?: string
+    phone_number?: string
+    company_name?: string
+    job_title?: string
   }
   projected_revenue_high?: number
   projected_revenue_low?: number
+  estimated_close_date?: string
   stage?: {
     id: string
     name: string
+    details?: {
+      probability?: number
+      stage_order?: number
+      target_num_days?: number
+    }
+  }
+  user?: {
+    id: number
+    first_name?: string
+    last_name?: string
   }
   next_action_date?: string
+  date_created?: string
   last_updated?: string
+  affiliate_id?: number
   custom_fields?: Array<{
     id: number
     content: any
@@ -170,9 +188,10 @@ export class KeapClient {
   // ============ Legacy v1 API Methods (Opportunities) ============
   
   async getOpportunities(limit = 1000): Promise<KeapOpportunitiesResponse> {
+    // Include custom_fields in the response
     return this.request<KeapOpportunitiesResponse>(
       this.legacyBaseUrl, 
-      `/opportunities?limit=${limit}`,
+      `/opportunities?limit=${limit}&optional_properties=custom_fields`,
       { method: "GET" }
     )
   }
