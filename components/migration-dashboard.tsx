@@ -423,8 +423,11 @@ export function MigrationDashboard() {
 
               <TabsContent value="fields" className="mt-0 flex-1 overflow-auto">
                 <div className="text-center py-8 text-muted-foreground">
-                  <p>See the Field Mapping section below for full configuration.</p>
-                  <p className="text-sm mt-2">Map opportunity fields to deal custom fields before migration.</p>
+                  <p className="font-medium">Field Mapping</p>
+                  <p className="text-sm mt-2">See the full mapping interface below.</p>
+                  <p className="text-xs mt-4">
+                    Discovered {opportunities.length > 0 ? `fields from ${opportunities.length} opportunities` : 'no opportunities yet'}
+                  </p>
                 </div>
               </TabsContent>
 
@@ -511,7 +514,7 @@ export function MigrationDashboard() {
       {/* Field Mapping Section - Full Width */}
       {activeTab === "fields" && (
         <div className="mt-6">
-          <FieldMapper />
+          <FieldMapper opportunities={opportunities} />
         </div>
       )}
     </div>

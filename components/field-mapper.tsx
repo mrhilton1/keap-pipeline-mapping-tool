@@ -1,60 +1,37 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ArrowRight, Plus, RefreshCw, Loader2, Check, X, Trash2 } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { ArrowRight, Plus, RefreshCw, Loader2, Check, X, Link2, Unlink } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Opportunity } from "./opportunities-panel"
 
-interface OpportunityField {
+interface DiscoveredField {
+  path: string
+  label: string
+  type: string
+  sampleValues: string[]
+  count: number  // How many opportunities have this field
+}
+
+interface DealField {
   name: string
   label: string
   type: string
-  example?: any
+  isCustom: boolean
+  id?: string
 }
 
-interface CustomField {
-  id: string
-  name: string
-  label: string
-  description: string
-  type: {
-    discriminator: string
-    primitive_type: string
-  }
+interface FieldMapping {
+  sourceField: string
+  targetField: string | null
 }
-
-// Standard opportunity fields from v1 API
-const OPPORTUNITY_FIELDS: OpportunityField[] = [
-  { name: "opportunity_title", label: "Title", type: "TEXT" },
-  { name: "opportunity_notes", label: "Notes", type: "LONG_TEXT" },
-  { name: "next_action_notes", label: "Next Action Notes", type: "TEXT" },
-  { name: "projected_revenue_high", label: "Revenue (High)", type: "CURRENCY" },
-  { name: "projected_revenue_low", label: "Revenue (Low)", type: "CURRENCY" },
-  { name: "estimated_close_date", label: "Estimated Close", type: "DATE" },
-  { name: "date_created", label: "Date Created", type: "DATETIME" },
-  { name: "last_updated", label: "Last Updated", type: "DATETIME" },
-  { name: "contact.email", label: "Contact Email", type: "EMAIL" },
-  { name: "contact.phone_number", label: "Contact Phone", type: "PHONE" },
-  { name: "contact.company_name", label: "Company Name", type: "TEXT" },
-  { name: "stage.name", label: "Stage Name", type: "TEXT" },
-  { name: "user.first_name", label: "Assigned User", type: "NAME" },
-]
-
-// Standard deal fields in v2 API
-const DEAL_STANDARD_FIELDS = [
-  { name: "name", label: "Deal Name", type: "TEXT" },
-  { name: "value", label: "Value (Amount)", type: "CURRENCY" },
-  { name: "stage_id", label: "Stage", type: "REF" },
-  { name: "contact_ids", label: "Contacts", type: "ARRAY" },
-  { name: "estimated_close_time", label: "Estimated Close", type: "DATETIME" },
-]
 
 const FIELD_TYPES = [
   { value: "TEXT", label: "Text (short)" },
@@ -67,26 +44,125 @@ const FIELD_TYPES = [
   { value: "BOOLEAN", label: "Yes/No" },
   { value: "DATE", label: "Date" },
   { value: "DATETIME", label: "Date & Time" },
-  { value: "TIME", label: "Time" },
   { value: "EMAIL", label: "Email" },
   { value: "PHONE", label: "Phone" },
   { value: "URL", label: "URL" },
-  { value: "NAME", label: "Name" },
 ]
 
-export function FieldMapper() {
-  const [customFields, setCustomFields] = useState<CustomField[]>([])
+// Standard deal fields
+const STANDARD_DEAL_FIELDS: DealField[] = [
+  { name: "name", label: "Deal Name", type: "TEXT", isCustom: false },
+  { name: "value", label: "Value (Amount)", type: "CURRENCY", isCustom: false },
+  { name: "stage_id", label: "Stage", type: "REF", isCustom: false },
+  { name: "contact_ids", label: "Contacts", type: "ARRAY", isCustom: false },
+  { name: "estimated_close_time", label: "Estimated Close", type: "DATETIME", isCustom: false },
+]
+
+// Default mappings
+const DEFAULT_MAPPINGS: Record<string, string> = {
+  "opportunity_title": "name",
+  "projected_revenue_high": "value",
+  "contact.id": "contact_ids",
+  "estimated_close_date": "estimated_close_time",
+}
+
+interface FieldMapperProps {
+  opportunities: Opportunity[]
+}
+
+export function FieldMapper({ opportunities }: FieldMapperProps) {
+  const [customFields, setCustomFields] = useState<DealField[]>([])
+  const [mappings, setMappings] = useState<FieldMapping[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [showCreateDialog, setShowCreateDialog] = useState(false)
   
-  // New field form
+  // Create field dialog
+  const [showCreateDialog, setShowCreateDialog] = useState(false)
+  const [createForSource, setCreateForSource] = useState<string | null>(null)
   const [newFieldName, setNewFieldName] = useState("")
   const [newFieldLabel, setNewFieldLabel] = useState("")
-  const [newFieldDescription, setNewFieldDescription] = useState("")
   const [newFieldType, setNewFieldType] = useState("TEXT")
 
+  // Discover fields from actual opportunity data
+  const discoveredFields = useMemo(() => {
+    const fieldMap = new Map<string, DiscoveredField>()
+    
+    const processValue = (path: string, value: any, label: string) => {
+      if (value === null || value === undefined) return
+      
+      const existing = fieldMap.get(path)
+      const sampleStr = typeof value === 'object' ? JSON.stringify(value) : String(value)
+      const type = inferType(value)
+      
+      if (existing) {
+        existing.count++
+        if (existing.sampleValues.length < 3 && !existing.sampleValues.includes(sampleStr)) {
+          existing.sampleValues.push(sampleStr.substring(0, 50))
+        }
+      } else {
+        fieldMap.set(path, {
+          path,
+          label,
+          type,
+          sampleValues: [sampleStr.substring(0, 50)],
+          count: 1
+        })
+      }
+    }
+    
+    const inferType = (value: any): string => {
+      if (typeof value === 'number') return value % 1 === 0 ? 'INTEGER' : 'DECIMAL'
+      if (typeof value === 'boolean') return 'BOOLEAN'
+      if (typeof value === 'string') {
+        if (value.includes('@')) return 'EMAIL'
+        if (/^\d{4}-\d{2}-\d{2}/.test(value)) return 'DATETIME'
+        if (value.length > 100) return 'LONG_TEXT'
+        return 'TEXT'
+      }
+      return 'TEXT'
+    }
+    
+    const processObject = (obj: any, prefix: string, labelPrefix: string) => {
+      for (const [key, value] of Object.entries(obj)) {
+        if (key === 'custom_fields' && Array.isArray(value)) {
+          // Handle custom fields specially
+          value.forEach((cf: any) => {
+            const path = `custom_fields[${cf.id}]`
+            processValue(path, cf.content, `Custom Field #${cf.id}`)
+          })
+        } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+          // Nested object
+          processObject(value, `${prefix}${key}.`, `${labelPrefix}${formatLabel(key)} → `)
+        } else if (!Array.isArray(value)) {
+          // Simple value
+          const path = `${prefix}${key}`
+          processValue(path, value, `${labelPrefix}${formatLabel(key)}`)
+        }
+      }
+    }
+    
+    const formatLabel = (key: string): string => {
+      return key
+        .replace(/_/g, ' ')
+        .replace(/([A-Z])/g, ' $1')
+        .split(' ')
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ')
+        .trim()
+    }
+    
+    opportunities.forEach(opp => {
+      processObject(opp, '', '')
+    })
+    
+    // Sort by count (most common first) and filter out some noise
+    return Array.from(fieldMap.values())
+      .filter(f => !f.path.startsWith('stage.details.check_list_items'))
+      .sort((a, b) => b.count - a.count)
+  }, [opportunities])
+
+  // Load custom fields from Keap
   const loadCustomFields = async () => {
     try {
       setLoading(true)
@@ -98,7 +174,23 @@ export function FieldMapper() {
         throw new Error(data.error || data.details || "Failed to load")
       }
       
-      setCustomFields(data.custom_fields || [])
+      const fields = (data.custom_fields || []).map((f: any) => ({
+        name: f.name,
+        label: f.label,
+        type: f.type.primitive_type,
+        isCustom: true,
+        id: f.id
+      }))
+      
+      setCustomFields(fields)
+      
+      // Initialize mappings with defaults
+      const initialMappings = discoveredFields.map(df => ({
+        sourceField: df.path,
+        targetField: DEFAULT_MAPPINGS[df.path] || null
+      }))
+      setMappings(initialMappings)
+      
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load custom fields")
     } finally {
@@ -108,8 +200,39 @@ export function FieldMapper() {
 
   useEffect(() => {
     loadCustomFields()
-  }, [])
+  }, [discoveredFields])
 
+  // All available deal fields
+  const allDealFields = useMemo(() => {
+    return [...STANDARD_DEAL_FIELDS, ...customFields]
+  }, [customFields])
+
+  // Update a mapping
+  const updateMapping = (sourceField: string, targetField: string | null) => {
+    setMappings(prev => {
+      const existing = prev.find(m => m.sourceField === sourceField)
+      if (existing) {
+        return prev.map(m => m.sourceField === sourceField ? { ...m, targetField } : m)
+      }
+      return [...prev, { sourceField, targetField }]
+    })
+  }
+
+  // Get current mapping for a source field
+  const getMapping = (sourceField: string): string | null => {
+    return mappings.find(m => m.sourceField === sourceField)?.targetField || null
+  }
+
+  // Open create dialog for a specific source field
+  const openCreateDialog = (sourceField: string, suggestedLabel: string, suggestedType: string) => {
+    setCreateForSource(sourceField)
+    setNewFieldName(sourceField.replace(/[.\[\]]/g, '_').replace(/__+/g, '_'))
+    setNewFieldLabel(suggestedLabel)
+    setNewFieldType(suggestedType)
+    setShowCreateDialog(true)
+  }
+
+  // Create custom field
   const createCustomField = async () => {
     if (!newFieldName.trim()) {
       setError("Field name is required")
@@ -124,9 +247,9 @@ export function FieldMapper() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: newFieldName.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, ""),
+          name: newFieldName.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "").replace(/^[0-9]/, "_$&"),
           label: newFieldLabel || newFieldName,
-          description: newFieldDescription || `Custom field for ${newFieldLabel || newFieldName}`,
+          description: `Mapped from opportunity field: ${createForSource}`,
           primitiveType: newFieldType
         })
       })
@@ -137,13 +260,27 @@ export function FieldMapper() {
         throw new Error(data.details || data.error || "Failed to create")
       }
 
-      // Reset form and refresh list
+      // Add to custom fields and auto-map
+      const newField: DealField = {
+        name: data.name,
+        label: data.label,
+        type: data.type.primitive_type,
+        isCustom: true,
+        id: data.id
+      }
+      setCustomFields(prev => [...prev, newField])
+      
+      // Auto-map to the new field
+      if (createForSource) {
+        updateMapping(createForSource, newField.name)
+      }
+
+      // Reset form
       setNewFieldName("")
       setNewFieldLabel("")
-      setNewFieldDescription("")
       setNewFieldType("TEXT")
+      setCreateForSource(null)
       setShowCreateDialog(false)
-      await loadCustomFields()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create custom field")
     } finally {
@@ -151,305 +288,236 @@ export function FieldMapper() {
     }
   }
 
+  // Count mapped fields
+  const mappedCount = mappings.filter(m => m.targetField).length
+  const totalFields = discoveredFields.length
+
+  if (opportunities.length === 0) {
+    return (
+      <div className="text-center py-12 text-muted-foreground">
+        <p>No opportunities loaded.</p>
+        <p className="text-sm">Load opportunities to discover available fields.</p>
+      </div>
+    )
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Source: Opportunity Fields */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Badge variant="outline" className="bg-blue-50 text-blue-700">Source</Badge>
-              Opportunity Fields (v1)
-            </CardTitle>
-            <CardDescription>
-              Standard fields available on opportunities
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[400px] overflow-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Field</TableHead>
-                    <TableHead>Type</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {OPPORTUNITY_FIELDS.map((field) => (
-                    <TableRow key={field.name}>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{field.label}</p>
-                          <p className="text-xs text-muted-foreground font-mono">{field.name}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className="text-xs">
-                          {field.type}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Destination: Deal Custom Fields */}
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Badge variant="outline" className="bg-green-50 text-green-700">Destination</Badge>
-                  Deal Custom Fields (v2)
-                </CardTitle>
-                <CardDescription>
-                  Custom fields to store migrated data
-                </CardDescription>
-              </div>
-              <div className="flex gap-2">
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  onClick={loadCustomFields}
-                  disabled={loading}
-                >
-                  <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-                </Button>
-                <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-                  <DialogTrigger asChild>
-                    <Button size="sm">
-                      <Plus className="w-4 h-4 mr-1" />
-                      Add Field
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Create Custom Field</DialogTitle>
-                      <DialogDescription>
-                        Create a new custom field for deals to store opportunity data
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="fieldName">Field Name (API)</Label>
-                        <Input
-                          id="fieldName"
-                          placeholder="e.g., originalNotes"
-                          value={newFieldName}
-                          onChange={(e) => setNewFieldName(e.target.value)}
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Letters, numbers, underscores only. Start with letter.
-                        </p>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="fieldLabel">Display Label</Label>
-                        <Input
-                          id="fieldLabel"
-                          placeholder="e.g., Original Notes"
-                          value={newFieldLabel}
-                          onChange={(e) => setNewFieldLabel(e.target.value)}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="fieldType">Field Type</Label>
-                        <Select value={newFieldType} onValueChange={setNewFieldType}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {FIELD_TYPES.map((type) => (
-                              <SelectItem key={type.value} value={type.value}>
-                                {type.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="fieldDesc">Description (optional)</Label>
-                        <Input
-                          id="fieldDesc"
-                          placeholder="What this field stores..."
-                          value={newFieldDescription}
-                          onChange={(e) => setNewFieldDescription(e.target.value)}
-                        />
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
-                        Cancel
-                      </Button>
-                      <Button onClick={createCustomField} disabled={creating}>
-                        {creating ? (
-                          <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Creating...
-                          </>
-                        ) : (
-                          "Create Field"
-                        )}
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[400px] overflow-auto">
-              {loading ? (
-                <div className="flex items-center justify-center h-32">
-                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Field</TableHead>
-                      <TableHead>Type</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {/* Standard deal fields */}
-                    {DEAL_STANDARD_FIELDS.map((field) => (
-                      <TableRow key={field.name} className="bg-muted/30">
-                        <TableCell>
-                          <div>
-                            <p className="font-medium">{field.label}</p>
-                            <p className="text-xs text-muted-foreground font-mono">{field.name}</p>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-xs">
-                            {field.type}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {/* Custom fields */}
-                    {customFields.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={2} className="text-center text-muted-foreground py-8">
-                          No custom fields created yet.
-                          <br />
-                          <span className="text-xs">Click &quot;Add Field&quot; to create one.</span>
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      customFields.map((field) => (
-                        <TableRow key={field.id}>
-                          <TableCell>
-                            <div>
-                              <p className="font-medium">{field.label}</p>
-                              <p className="text-xs text-muted-foreground font-mono">{field.name}</p>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="secondary" className="text-xs">
-                              {field.type.primitive_type}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold">Field Mapping</h3>
+          <p className="text-sm text-muted-foreground">
+            {mappedCount} of {totalFields} fields mapped • Discovered from {opportunities.length} opportunities
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={loadCustomFields} disabled={loading}>
+          <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+          Refresh
+        </Button>
       </div>
 
-      {/* Field Mapping Preview */}
+      {/* Mapping Table */}
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg">Migration Field Mapping</CardTitle>
-          <CardDescription>
-            How opportunity fields will map to deal fields during migration
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            <div className="flex items-center gap-4 p-3 bg-muted/50 rounded-lg">
-              <div className="flex-1">
-                <Badge variant="outline" className="mb-1">opportunity_title</Badge>
-              </div>
-              <ArrowRight className="w-4 h-4 text-muted-foreground" />
-              <div className="flex-1">
-                <Badge variant="secondary" className="mb-1">name</Badge>
-              </div>
-              <Check className="w-4 h-4 text-green-500" />
-            </div>
-            <div className="flex items-center gap-4 p-3 bg-muted/50 rounded-lg">
-              <div className="flex-1">
-                <Badge variant="outline" className="mb-1">projected_revenue_high</Badge>
-              </div>
-              <ArrowRight className="w-4 h-4 text-muted-foreground" />
-              <div className="flex-1">
-                <Badge variant="secondary" className="mb-1">value.amount</Badge>
-              </div>
-              <Check className="w-4 h-4 text-green-500" />
-            </div>
-            <div className="flex items-center gap-4 p-3 bg-muted/50 rounded-lg">
-              <div className="flex-1">
-                <Badge variant="outline" className="mb-1">contact.id</Badge>
-              </div>
-              <ArrowRight className="w-4 h-4 text-muted-foreground" />
-              <div className="flex-1">
-                <Badge variant="secondary" className="mb-1">contact_ids[]</Badge>
-              </div>
-              <Check className="w-4 h-4 text-green-500" />
-            </div>
-            <div className="flex items-center gap-4 p-3 bg-muted/50 rounded-lg">
-              <div className="flex-1">
-                <Badge variant="outline" className="mb-1">opportunity_notes</Badge>
-              </div>
-              <ArrowRight className="w-4 h-4 text-muted-foreground" />
-              <div className="flex-1">
-                {customFields.find(f => f.name === "opportunityNotes") ? (
-                  <Badge variant="secondary" className="mb-1">opportunityNotes</Badge>
+        <CardContent className="p-0">
+          <div className="max-h-[600px] overflow-auto">
+            <table className="w-full">
+              <thead className="sticky top-0 bg-background border-b">
+                <tr>
+                  <th className="text-left p-3 font-medium text-sm">
+                    <Badge variant="outline" className="bg-blue-50 text-blue-700">Source</Badge>
+                    <span className="ml-2">Opportunity Field</span>
+                  </th>
+                  <th className="w-10"></th>
+                  <th className="text-left p-3 font-medium text-sm">
+                    <Badge variant="outline" className="bg-green-50 text-green-700">Target</Badge>
+                    <span className="ml-2">Deal Field</span>
+                  </th>
+                  <th className="w-32 p-3"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {loading ? (
+                  <tr>
+                    <td colSpan={4} className="text-center py-12">
+                      <Loader2 className="w-6 h-6 animate-spin mx-auto text-muted-foreground" />
+                    </td>
+                  </tr>
                 ) : (
-                  <Badge variant="destructive" className="mb-1">No target field</Badge>
+                  discoveredFields.map((field) => {
+                    const currentMapping = getMapping(field.path)
+                    const targetField = allDealFields.find(f => f.name === currentMapping)
+                    
+                    return (
+                      <tr key={field.path} className="hover:bg-muted/30">
+                        {/* Source field */}
+                        <td className="p-3">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm">{field.label}</span>
+                              <Badge variant="secondary" className="text-[10px]">{field.type}</Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground font-mono">{field.path}</p>
+                            {field.sampleValues.length > 0 && (
+                              <p className="text-xs text-muted-foreground truncate max-w-xs">
+                                e.g., {field.sampleValues[0]}
+                              </p>
+                            )}
+                            <Badge variant="outline" className="text-[10px]">
+                              {field.count}/{opportunities.length} records
+                            </Badge>
+                          </div>
+                        </td>
+                        
+                        {/* Arrow */}
+                        <td className="text-center">
+                          {currentMapping ? (
+                            <Link2 className="w-4 h-4 text-green-500 mx-auto" />
+                          ) : (
+                            <Unlink className="w-4 h-4 text-muted-foreground/30 mx-auto" />
+                          )}
+                        </td>
+                        
+                        {/* Target field selector */}
+                        <td className="p-3">
+                          <Select
+                            value={currentMapping || "unmapped"}
+                            onValueChange={(v) => updateMapping(field.path, v === "unmapped" ? null : v)}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue>
+                                {currentMapping ? (
+                                  <div className="flex items-center gap-2">
+                                    <span>{targetField?.label || currentMapping}</span>
+                                    {targetField?.isCustom && (
+                                      <Badge variant="secondary" className="text-[10px]">Custom</Badge>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-muted-foreground">Not mapped</span>
+                                )}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="unmapped">
+                                <span className="text-muted-foreground">— Not mapped —</span>
+                              </SelectItem>
+                              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                                Standard Fields
+                              </div>
+                              {STANDARD_DEAL_FIELDS.map(df => (
+                                <SelectItem key={df.name} value={df.name}>
+                                  {df.label}
+                                </SelectItem>
+                              ))}
+                              {customFields.length > 0 && (
+                                <>
+                                  <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground border-t mt-1 pt-2">
+                                    Custom Fields
+                                  </div>
+                                  {customFields.map(df => (
+                                    <SelectItem key={df.name} value={df.name}>
+                                      {df.label}
+                                    </SelectItem>
+                                  ))}
+                                </>
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        
+                        {/* Create button */}
+                        <td className="p-3">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-xs"
+                            onClick={() => openCreateDialog(field.path, field.label, field.type)}
+                          >
+                            <Plus className="w-3 h-3 mr-1" />
+                            Create Field
+                          </Button>
+                        </td>
+                      </tr>
+                    )
+                  })
                 )}
-              </div>
-              {customFields.find(f => f.name === "opportunityNotes") ? (
-                <Check className="w-4 h-4 text-green-500" />
-              ) : (
-                <X className="w-4 h-4 text-red-500" />
-              )}
-            </div>
-            <div className="flex items-center gap-4 p-3 bg-muted/50 rounded-lg">
-              <div className="flex-1">
-                <Badge variant="outline" className="mb-1">id</Badge>
-                <span className="text-xs text-muted-foreground ml-2">(for tracking)</span>
-              </div>
-              <ArrowRight className="w-4 h-4 text-muted-foreground" />
-              <div className="flex-1">
-                {customFields.find(f => f.name === "originalOpportunityId") ? (
-                  <Badge variant="secondary" className="mb-1">originalOpportunityId</Badge>
-                ) : (
-                  <Badge variant="destructive" className="mb-1">No target field</Badge>
-                )}
-              </div>
-              {customFields.find(f => f.name === "originalOpportunityId") ? (
-                <Check className="w-4 h-4 text-green-500" />
-              ) : (
-                <X className="w-4 h-4 text-red-500" />
-              )}
-            </div>
+              </tbody>
+            </table>
           </div>
         </CardContent>
       </Card>
+
+      {/* Create Field Dialog */}
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Custom Deal Field</DialogTitle>
+            <DialogDescription>
+              Create a new custom field to store data from: <code className="bg-muted px-1 rounded">{createForSource}</code>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="fieldName">Field Name (API)</Label>
+              <Input
+                id="fieldName"
+                placeholder="e.g., originalNotes"
+                value={newFieldName}
+                onChange={(e) => setNewFieldName(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Letters, numbers, underscores only. Must start with letter.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="fieldLabel">Display Label</Label>
+              <Input
+                id="fieldLabel"
+                placeholder="e.g., Original Notes"
+                value={newFieldLabel}
+                onChange={(e) => setNewFieldLabel(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="fieldType">Field Type</Label>
+              <Select value={newFieldType} onValueChange={setNewFieldType}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {FIELD_TYPES.map((type) => (
+                    <SelectItem key={type.value} value={type.value}>
+                      {type.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={createCustomField} disabled={creating}>
+              {creating ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                "Create & Map"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
