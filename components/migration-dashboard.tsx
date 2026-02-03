@@ -350,9 +350,29 @@ export function MigrationDashboard() {
             dealData.owner_id = opp.user.id
           }
           
-          // Add value
-          if (opp.projected_revenue_high || opp.projected_revenue_low) {
-            dealData.value = opp.projected_revenue_high || opp.projected_revenue_low
+          // Add value - check if using average or single amount
+          const revenueHigh = opp.projected_revenue_high || 0
+          const revenueLow = opp.projected_revenue_low || 0
+          const useAverage = fieldMappingConfig?.mappings?.some(
+            m => m.sourceField === "projected_revenue_high" && m.targetField === "value.average"
+          ) || fieldMappingConfig?.mappings?.some(
+            m => m.sourceField === "projected_revenue_low" && m.targetField === "value.average"
+          )
+          
+          if (revenueHigh > 0 || revenueLow > 0) {
+            let finalValue: number
+            
+            if (useAverage && revenueHigh > 0 && revenueLow > 0) {
+              // Both values exist - use average
+              finalValue = Math.round((revenueHigh + revenueLow) / 2)
+              console.log(`[Migration] Value (Average): (${revenueLow} + ${revenueHigh}) / 2 = ${finalValue}`)
+            } else {
+              // Use whichever value exists (or high if both, when not averaging)
+              finalValue = revenueHigh || revenueLow
+              console.log(`[Migration] Value (Single): ${finalValue}`)
+            }
+            
+            dealData.value = finalValue
             dealData.currency = "USD"
           }
           
