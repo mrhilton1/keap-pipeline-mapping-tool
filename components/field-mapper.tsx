@@ -49,21 +49,33 @@ const FIELD_TYPES = [
   { value: "URL", label: "URL" },
 ]
 
-// Standard deal fields (v2 API)
+// Standard deal fields (v2 API) - matches POST /v2/deals schema
 const STANDARD_DEAL_FIELDS: DealField[] = [
   { name: "name", label: "Deal Name", type: "TEXT", isCustom: false },
-  { name: "value", label: "Value (Amount)", type: "CURRENCY", isCustom: false },
-  { name: "stage_id", label: "Stage", type: "REF", isCustom: false },
-  { name: "contact_ids", label: "Contacts", type: "ARRAY", isCustom: false },
+  { name: "value.amount", label: "Value (Amount)", type: "NUMBER", isCustom: false },
+  { name: "value.currency", label: "Value (Currency)", type: "TEXT", isCustom: false },
+  { name: "stage_id", label: "Stage ID", type: "REF", isCustom: false },
+  { name: "contacts.id", label: "Primary Contact", type: "REF", isCustom: false },
+  { name: "owner_id", label: "Deal Owner", type: "REF", isCustom: false },
   { name: "estimated_close_time", label: "Estimated Close", type: "DATETIME", isCustom: false },
-  { name: "notes", label: "Deal Notes", type: "LONG_TEXT", isCustom: false },
+  { name: "status", label: "Status", type: "TEXT", isCustom: false },
 ]
 
-// Default mappings
+// Descriptions for standard fields to explain what they do
+const FIELD_DESCRIPTIONS: Record<string, string> = {
+  "contacts.id": "Links contact by ID, displays name",
+  "owner_id": "Links user by ID, displays name",
+  "stage_id": "Maps to selected pipeline stage",
+  "value.amount": "Numeric value only",
+  "value.currency": "e.g., USD",
+}
+
+// Default mappings - opportunity field → deal field
 const DEFAULT_MAPPINGS: Record<string, string> = {
   "opportunity_title": "name",
-  "projected_revenue_high": "value",
-  "contact.id": "contact_ids",
+  "projected_revenue_high": "value.amount",
+  "contact.id": "contacts.id",           // Contact ID → Primary Contact
+  "user.id": "owner_id",                  // User ID → Deal Owner
   "estimated_close_date": "estimated_close_time",
 }
 
@@ -418,9 +430,16 @@ export function FieldMapper({ opportunities }: FieldMapperProps) {
                               </div>
                               {STANDARD_DEAL_FIELDS.map(df => (
                                 <SelectItem key={df.name} value={df.name}>
-                                  <div className="flex items-center justify-between w-full gap-2">
-                                    <span>{df.label}</span>
-                                    <Badge variant="outline" className="text-[9px] ml-2">{df.type}</Badge>
+                                  <div className="flex flex-col">
+                                    <div className="flex items-center gap-2">
+                                      <span>{df.label}</span>
+                                      <Badge variant="outline" className="text-[9px]">{df.type}</Badge>
+                                    </div>
+                                    {FIELD_DESCRIPTIONS[df.name] && (
+                                      <span className="text-[10px] text-muted-foreground">
+                                        {FIELD_DESCRIPTIONS[df.name]}
+                                      </span>
+                                    )}
                                   </div>
                                 </SelectItem>
                               ))}
