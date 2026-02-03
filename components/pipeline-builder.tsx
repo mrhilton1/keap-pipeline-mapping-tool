@@ -10,7 +10,6 @@ import {
   Trash2, 
   GripVertical, 
   Check, 
-  Pencil, 
   ChevronDown, 
   ChevronRight,
   Loader2,
@@ -38,8 +37,6 @@ export function PipelineBuilder({
   isCreating 
 }: PipelineBuilderProps) {
   const [expandedPipelines, setExpandedPipelines] = useState<Set<number>>(new Set([0]))
-  const [editingPipeline, setEditingPipeline] = useState<number | null>(null)
-  const [editingStage, setEditingStage] = useState<{ pipeline: number; stage: number } | null>(null)
 
   const toggleExpanded = (index: number) => {
     const newExpanded = new Set(expandedPipelines)
@@ -125,44 +122,31 @@ export function PipelineBuilder({
                 onClick={() => toggleExpanded(pIndex)}
               >
                 {expandedPipelines.has(pIndex) ? (
-                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                  <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                 ) : (
-                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                  <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                 )}
                 
-                {editingPipeline === pIndex ? (
-                  <Input
-                    value={pipeline.name}
-                    onChange={(e) => updatePipelineName(pIndex, e.target.value)}
-                    onBlur={() => setEditingPipeline(null)}
-                    onKeyDown={(e) => e.key === 'Enter' && setEditingPipeline(null)}
-                    onClick={(e) => e.stopPropagation()}
-                    className="h-7 w-48"
-                    autoFocus
-                  />
-                ) : (
-                  <span className="font-medium">{pipeline.name}</span>
-                )}
+                {/* Always show editable input for pipeline name */}
+                <Input
+                  value={pipeline.name}
+                  onChange={(e) => updatePipelineName(pIndex, e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="h-8 w-48 font-medium"
+                  placeholder="Pipeline name..."
+                />
                 
-                <Badge variant="secondary" className="ml-2">
+                <Badge variant="secondary" className="flex-shrink-0">
                   {pipeline.stages.length} stages
                 </Badge>
                 
                 {pipeline.matchingOpportunities.length > 0 && (
-                  <Badge variant="outline" className="ml-1">
+                  <Badge variant="outline" className="flex-shrink-0">
                     {pipeline.matchingOpportunities.length} opportunities
                   </Badge>
                 )}
                 
-                <div className="ml-auto flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-7 w-7"
-                    onClick={() => setEditingPipeline(pIndex)}
-                  >
-                    <Pencil className="w-3 h-3" />
-                  </Button>
+                <div className="ml-auto flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                   <Button 
                     variant="ghost" 
                     size="icon" 
@@ -176,9 +160,9 @@ export function PipelineBuilder({
               
               {expandedPipelines.has(pIndex) && (
                 <CardContent className="pt-3">
-                  {pipeline.description && (
-                    <p className="text-sm text-muted-foreground mb-3">{pipeline.description}</p>
-                  )}
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Edit the stage names below, or use the defaults. All pipelines will be created in your Keap account.
+                  </p>
                   
                   <div className="space-y-2">
                     {pipeline.stages.map((stage, sIndex) => (
@@ -186,33 +170,23 @@ export function PipelineBuilder({
                         key={sIndex} 
                         className="flex items-center gap-2 p-2 rounded-md bg-muted/20 group"
                       >
-                        <GripVertical className="w-4 h-4 text-muted-foreground/50" />
-                        <div className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-medium">
+                        <GripVertical className="w-4 h-4 text-muted-foreground/50 flex-shrink-0 cursor-grab" />
+                        <div className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-medium flex-shrink-0">
                           {sIndex + 1}
                         </div>
                         
-                        {editingStage?.pipeline === pIndex && editingStage?.stage === sIndex ? (
-                          <Input
-                            value={stage}
-                            onChange={(e) => updateStageName(pIndex, sIndex, e.target.value)}
-                            onBlur={() => setEditingStage(null)}
-                            onKeyDown={(e) => e.key === 'Enter' && setEditingStage(null)}
-                            className="h-7 flex-1"
-                            autoFocus
-                          />
-                        ) : (
-                          <span 
-                            className="flex-1 cursor-pointer hover:text-primary"
-                            onClick={() => setEditingStage({ pipeline: pIndex, stage: sIndex })}
-                          >
-                            {stage}
-                          </span>
-                        )}
+                        {/* Always show editable input for stage name */}
+                        <Input
+                          value={stage}
+                          onChange={(e) => updateStageName(pIndex, sIndex, e.target.value)}
+                          className="h-7 flex-1"
+                          placeholder="Stage name..."
+                        />
                         
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
+                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive flex-shrink-0"
                           onClick={() => removeStage(pIndex, sIndex)}
                           disabled={pipeline.stages.length <= 1}
                         >
@@ -224,7 +198,7 @@ export function PipelineBuilder({
                     <Button 
                       variant="ghost" 
                       size="sm" 
-                      className="w-full mt-2"
+                      className="w-full mt-2 border-dashed border"
                       onClick={() => addStage(pIndex)}
                     >
                       <Plus className="w-4 h-4 mr-1" />
