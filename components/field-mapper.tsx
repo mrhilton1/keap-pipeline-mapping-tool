@@ -46,11 +46,24 @@ interface Stage {
   order?: number
 }
 
+// Individual mapping from opportunity stage name to target stage
+interface PerStageMapping {
+  opportunityStageName: string  // The stage name from opportunities (case-insensitive key)
+  opportunityCount: number      // How many opportunities have this stage
+  targetStageId: string | null  // The mapped target stage ID
+  targetStageName: string | null // The mapped target stage name
+  isAutoMatched: boolean        // True if auto-matched by name
+}
+
 interface StageMapping {
   pipelineId: string | null
   pipelineName: string | null
-  stageId: string | null
-  stageName: string | null
+  stageId: string | null        // Legacy: fallback stage ID
+  stageName: string | null      // Legacy: fallback stage name
+  // New: per-stage mappings
+  perStageMappings: PerStageMapping[]
+  fallbackStageId: string | null
+  fallbackStageName: string | null
 }
 
 interface KeapUser {
@@ -87,7 +100,7 @@ const STANDARD_DEAL_FIELDS: DealField[] = [
   { name: "value.amount", label: "Value (Amount)", type: "NUMBER", isCustom: false },
   { name: "value.currency", label: "Value (Currency)", type: "TEXT", isCustom: false },
   { name: "contacts.id", label: "Primary Contact (1:1)", type: "REF", isCustom: false },
-  { name: "owner_id", label: "Keep Original Owner (1:1)", type: "REF", isCustom: false },
+  { name: "owner_id", label: "Keap Original Owner", type: "REF", isCustom: false },
   { name: "estimated_close_time", label: "Estimated Close", type: "DATETIME", isCustom: false },
   { name: "status", label: "Status", type: "TEXT", isCustom: false },
 ]
@@ -96,20 +109,20 @@ const STANDARD_DEAL_FIELDS: DealField[] = [
 const SPECIAL_DEAL_FIELDS: DealField[] = [
   { name: "value.average", label: "Value (Average)", type: "NUMBER", isCustom: false }, // Averages low & high revenue
   { name: "_deal_notes", label: "Add as Deal Note", type: "LONG_TEXT", isCustom: false },
-  { name: "_stage_mapping", label: "Assign ALL to Pipeline/Stage", type: "STAGE", isCustom: false },
-  { name: "_owner_mapping", label: "Assign ALL to Same Owner", type: "USER", isCustom: false },
+  { name: "_stage_mapping", label: "Smart Stage Mapping", type: "STAGE", isCustom: false },
+  { name: "_owner_mapping", label: "⚠️ Assign ALL to Same Owner", type: "USER", isCustom: false },
 ]
 
 // Descriptions for standard fields to explain what they do
 const FIELD_DESCRIPTIONS: Record<string, string> = {
   "contacts.id": "Each deal gets its own contact (by ID)",
-  "owner_id": "Each deal keeps its original owner",
+  "owner_id": "Each deal keeps its original Keap owner from the opportunity",
   "value.amount": "Numeric value only",
   "value.average": "Averages Low & High revenue (auto-links both fields)",
   "value.currency": "e.g., USD",
   "_deal_notes": "Creates note via /v2/deals/{id}/notes API",
-  "_stage_mapping": "Assign ALL deals to same pipeline/stage",
-  "_owner_mapping": "Assign ALL deals to same owner",
+  "_stage_mapping": "Auto-match stages by name, map unmatched manually",
+  "_owner_mapping": "⚠️ OVERRIDE: All deals assigned to ONE selected owner",
 }
 
 // Fields to hide from source list (not useful for migration)
@@ -142,14 +155,30 @@ const DEFAULT_MAPPINGS: Record<string, string> = {
   "projected_revenue_high": "value.average",  // Both revenue fields → average
   "projected_revenue_low": "value.average",   // Both revenue fields → average
   "contact.id": "contacts.id",           // Contact ID → Primary Contact
-  "user.id": "_owner_mapping",           // User ID → Select Deal Owner from list
+  "user.id": "owner_id",                 // User ID → Keep Keap Original Owner (default)
   "estimated_close_date": "estimated_close_time",
-  "stage.name": "_stage_mapping",         // Stage name → Pipeline stage selector
+  "stage.name": "_stage_mapping",         // Stage name → Smart Pipeline stage mapping
   "opportunity_notes": "_deal_notes",     // Notes → Deal notes API
   "next_action_notes": "_deal_notes",     // Next action notes → Deal notes API
 }
 
 // Exported types for parent state management
+export interface PerStageMappingExport {
+  opportunityStageName: string
+  opportunityCount: number
+  targetStageId: string | null
+  targetStageName: string | null
+  isAutoMatched: boolean
+}
+
+export interface StageMappingExport {
+  pipelineId: string | null
+  pipelineName: string | null
+  perStageMappings: PerStageMappingExport[]
+  fallbackStageId: string | null
+  fallbackStageName: string | null
+}
+
 export interface FieldMappingConfig {
   mappings: FieldMapping[]
   stageMapping: StageMapping
@@ -178,7 +207,10 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, savedConf
     pipelineId: null,
     pipelineName: null,
     stageId: null,
-    stageName: null
+    stageName: null,
+    perStageMappings: [],
+    fallbackStageId: null,
+    fallbackStageName: null
   })
   
   // Users for owner mapping
@@ -487,18 +519,59 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, savedConf
   const selectedPipeline = pipelines.find(p => p.id === stageMapping.pipelineId)
   const availableStages = selectedPipeline?.stages || []
 
-  // Handle pipeline selection
-  const handlePipelineChange = (pipelineId: string) => {
-    const pipeline = pipelines.find(p => p.id === pipelineId)
-    setStageMapping({
-      pipelineId,
-      pipelineName: pipeline?.name || null,
-      stageId: null,  // Reset stage when pipeline changes
-      stageName: null
+  // Compute unique opportunity stage names with counts
+  const opportunityStages = useMemo(() => {
+    const stageMap = new Map<string, { name: string; count: number }>()
+    opportunities.forEach(opp => {
+      const stageName = opp.stage?.name
+      if (stageName) {
+        const key = stageName.toLowerCase() // Case-insensitive key
+        const existing = stageMap.get(key)
+        if (existing) {
+          existing.count++
+        } else {
+          stageMap.set(key, { name: stageName, count: 1 })
+        }
+      }
+    })
+    return Array.from(stageMap.values()).sort((a, b) => b.count - a.count)
+  }, [opportunities])
+
+  // Compute auto-matched and unmatched stages when pipeline changes
+  const computePerStageMappings = (pipelineStages: Stage[]): PerStageMapping[] => {
+    return opportunityStages.map(oppStage => {
+      // Try to find a matching stage (case-insensitive)
+      const matchedStage = pipelineStages.find(
+        ps => ps.name.toLowerCase() === oppStage.name.toLowerCase()
+      )
+      return {
+        opportunityStageName: oppStage.name,
+        opportunityCount: oppStage.count,
+        targetStageId: matchedStage?.id || null,
+        targetStageName: matchedStage?.name || null,
+        isAutoMatched: !!matchedStage
+      }
     })
   }
 
-  // Handle stage selection
+  // Handle pipeline selection - auto-compute stage mappings
+  const handlePipelineChange = (pipelineId: string) => {
+    const pipeline = pipelines.find(p => p.id === pipelineId)
+    const pipelineStages = pipeline?.stages || []
+    const perStageMappings = computePerStageMappings(pipelineStages)
+    
+    setStageMapping({
+      pipelineId,
+      pipelineName: pipeline?.name || null,
+      stageId: null,
+      stageName: null,
+      perStageMappings,
+      fallbackStageId: null,
+      fallbackStageName: null
+    })
+  }
+
+  // Handle stage selection (legacy - for fallback)
   const handleStageChange = (stageId: string) => {
     const stage = availableStages.find(s => s.id === stageId)
     setStageMapping(prev => ({
@@ -507,6 +580,39 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, savedConf
       stageName: stage?.name || null
     }))
   }
+
+  // Handle per-stage mapping change
+  const handlePerStageMappingChange = (opportunityStageName: string, targetStageId: string | null) => {
+    const stage = targetStageId ? availableStages.find(s => s.id === targetStageId) : null
+    setStageMapping(prev => ({
+      ...prev,
+      perStageMappings: prev.perStageMappings.map(psm => 
+        psm.opportunityStageName === opportunityStageName
+          ? { ...psm, targetStageId, targetStageName: stage?.name || null, isAutoMatched: false }
+          : psm
+      )
+    }))
+  }
+
+  // Handle fallback stage selection
+  const handleFallbackStageChange = (stageId: string | null) => {
+    const stage = stageId ? availableStages.find(s => s.id === stageId) : null
+    setStageMapping(prev => ({
+      ...prev,
+      fallbackStageId: stageId,
+      fallbackStageName: stage?.name || null
+    }))
+  }
+
+  // Computed stats for stage mapping
+  const autoMatchedStages = stageMapping.perStageMappings.filter(p => p.isAutoMatched)
+  const unmatchedStages = stageMapping.perStageMappings.filter(p => !p.isAutoMatched && !p.targetStageId)
+  const manuallyMappedStages = stageMapping.perStageMappings.filter(p => !p.isAutoMatched && p.targetStageId)
+  
+  // Count opportunities that would be skipped (unmatched + no fallback)
+  const skippedOpportunityCount = stageMapping.fallbackStageId 
+    ? 0 
+    : unmatchedStages.reduce((sum, s) => sum + s.opportunityCount, 0)
 
   // Handle owner (user) selection
   const handleOwnerChange = (userId: string) => {
@@ -646,13 +752,15 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, savedConf
                                 {currentMapping === "_stage_mapping" ? (
                                   <div className="flex items-center gap-2">
                                     <span className="text-blue-700">
-                                      {stageMapping.pipelineName && stageMapping.stageName 
-                                        ? `${stageMapping.pipelineName} → ${stageMapping.stageName}`
-                                        : "Map to Pipeline Stage"
+                                      {stageMapping.pipelineName 
+                                        ? `${stageMapping.pipelineName} (${autoMatchedStages.length + manuallyMappedStages.length}/${opportunityStages.length} mapped)`
+                                        : "Smart Stage Mapping"
                                       }
                                     </span>
-                                    {stageMapping.stageId && (
-                                      <Badge variant="outline" className="text-[10px] bg-blue-50">Configured</Badge>
+                                    {stageMapping.pipelineId && (
+                                      <Badge variant="outline" className={`text-[10px] ${unmatchedStages.length > 0 && !stageMapping.fallbackStageId ? 'bg-amber-50 text-amber-700' : 'bg-green-50 text-green-700'}`}>
+                                        {unmatchedStages.length > 0 && !stageMapping.fallbackStageId ? `${skippedOpportunityCount} will skip` : 'Ready'}
+                                      </Badge>
                                     )}
                                   </div>
                                 ) : currentMapping === "_owner_mapping" ? (
@@ -747,51 +855,28 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, savedConf
                             </SelectContent>
                           </Select>
                           
-                          {/* Pipeline & Stage selectors - shown when _stage_mapping is selected */}
+                          {/* Smart Stage Mapping - shown when _stage_mapping is selected */}
                           {currentMapping === "_stage_mapping" && (
-                            <div className="mt-2 p-2 bg-blue-50/50 rounded border border-blue-100 space-y-1.5">
-                              <div className="flex gap-2">
-                                {/* Pipeline selector */}
+                            <div className="mt-2 p-3 bg-blue-50/50 rounded border border-blue-100 space-y-3">
+                              {/* Pipeline selector */}
+                              <div>
+                                <Label className="text-xs font-medium mb-1 block">Target Pipeline</Label>
                                 <Select
                                   value={stageMapping.pipelineId || ""}
                                   onValueChange={handlePipelineChange}
                                 >
-                                  <SelectTrigger className="h-8 text-xs bg-white flex-1">
-                                    <SelectValue placeholder="Pipeline..." />
+                                  <SelectTrigger className="h-8 text-xs bg-white">
+                                    <SelectValue placeholder="Select target pipeline..." />
                                   </SelectTrigger>
                                   <SelectContent position="popper" className="max-h-[200px]">
                                     {pipelines.length === 0 ? (
                                       <div className="px-2 py-2 text-center text-xs text-muted-foreground">
-                                        No pipelines
+                                        No pipelines available
                                       </div>
                                     ) : (
                                       pipelines.map(p => (
                                         <SelectItem key={p.id} value={p.id} className="text-xs">
-                                          {p.name} ({p.stages?.length || 0})
-                                        </SelectItem>
-                                      ))
-                                    )}
-                                  </SelectContent>
-                                </Select>
-                              
-                                {/* Stage selector */}
-                                <Select
-                                  value={stageMapping.stageId || ""}
-                                  onValueChange={handleStageChange}
-                                  disabled={!stageMapping.pipelineId}
-                                >
-                                  <SelectTrigger className="h-8 text-xs bg-white flex-1">
-                                    <SelectValue placeholder="Stage..." />
-                                  </SelectTrigger>
-                                  <SelectContent position="popper" className="max-h-[200px]">
-                                    {availableStages.length === 0 ? (
-                                      <div className="px-2 py-2 text-center text-xs text-muted-foreground">
-                                        Select pipeline first
-                                      </div>
-                                    ) : (
-                                      availableStages.map((s, idx) => (
-                                        <SelectItem key={s.id} value={s.id} className="text-xs">
-                                          {idx + 1}. {s.name}
+                                          {p.name} ({p.stages?.length || 0} stages)
                                         </SelectItem>
                                       ))
                                     )}
@@ -799,11 +884,138 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, savedConf
                                 </Select>
                               </div>
                               
-                              {/* Show selected mapping - compact */}
-                              {stageMapping.pipelineName && stageMapping.stageName && (
-                                <div className="flex items-center gap-1 text-[10px] text-green-700">
-                                  <Check className="w-3 h-3 flex-shrink-0" />
-                                  <span className="truncate">→ {stageMapping.pipelineName} &gt; {stageMapping.stageName}</span>
+                              {/* Stage mapping details - shown after pipeline selected */}
+                              {stageMapping.pipelineId && (
+                                <div className="space-y-2">
+                                  {/* Auto-matched stages */}
+                                  {autoMatchedStages.length > 0 && (
+                                    <div className="space-y-1">
+                                      <div className="flex items-center gap-1 text-xs font-medium text-green-700">
+                                        <Check className="w-3 h-3" />
+                                        Auto-Matched ({autoMatchedStages.length})
+                                      </div>
+                                      <div className="pl-4 space-y-0.5">
+                                        {autoMatchedStages.map(psm => (
+                                          <div key={psm.opportunityStageName} className="flex items-center gap-2 text-[11px] text-green-700">
+                                            <span>"{psm.opportunityStageName}"</span>
+                                            <span className="text-muted-foreground">({psm.opportunityCount})</span>
+                                            <ArrowRight className="w-3 h-3" />
+                                            <span className="font-medium">{psm.targetStageName}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                  
+                                  {/* Manually mapped stages */}
+                                  {manuallyMappedStages.length > 0 && (
+                                    <div className="space-y-1">
+                                      <div className="flex items-center gap-1 text-xs font-medium text-blue-700">
+                                        <Link2 className="w-3 h-3" />
+                                        Manually Mapped ({manuallyMappedStages.length})
+                                      </div>
+                                      <div className="pl-4 space-y-1">
+                                        {manuallyMappedStages.map(psm => (
+                                          <div key={psm.opportunityStageName} className="flex items-center gap-2 text-[11px]">
+                                            <span className="text-muted-foreground">"{psm.opportunityStageName}"</span>
+                                            <span className="text-muted-foreground">({psm.opportunityCount})</span>
+                                            <ArrowRight className="w-3 h-3 text-blue-500" />
+                                            <Select
+                                              value={psm.targetStageId || ""}
+                                              onValueChange={(v) => handlePerStageMappingChange(psm.opportunityStageName, v || null)}
+                                            >
+                                              <SelectTrigger className="h-6 text-[11px] bg-white w-32">
+                                                <SelectValue>{psm.targetStageName}</SelectValue>
+                                              </SelectTrigger>
+                                              <SelectContent position="popper" className="max-h-[150px]">
+                                                <SelectItem value="" className="text-[11px] text-muted-foreground">— Unmapped —</SelectItem>
+                                                {availableStages.map(s => (
+                                                  <SelectItem key={s.id} value={s.id} className="text-[11px]">{s.name}</SelectItem>
+                                                ))}
+                                              </SelectContent>
+                                            </Select>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                  
+                                  {/* Unmatched stages - need mapping */}
+                                  {unmatchedStages.length > 0 && (
+                                    <div className="space-y-1">
+                                      <div className="flex items-center gap-1 text-xs font-medium text-amber-700">
+                                        <X className="w-3 h-3" />
+                                        Needs Mapping ({unmatchedStages.length})
+                                      </div>
+                                      <div className="pl-4 space-y-1">
+                                        {unmatchedStages.map(psm => (
+                                          <div key={psm.opportunityStageName} className="flex items-center gap-2 text-[11px]">
+                                            <span className="text-amber-700">"{psm.opportunityStageName}"</span>
+                                            <Badge variant="outline" className="text-[9px] bg-amber-50 text-amber-700">
+                                              {psm.opportunityCount} opps
+                                            </Badge>
+                                            <ArrowRight className="w-3 h-3 text-muted-foreground" />
+                                            <Select
+                                              value=""
+                                              onValueChange={(v) => handlePerStageMappingChange(psm.opportunityStageName, v)}
+                                            >
+                                              <SelectTrigger className="h-6 text-[11px] bg-white w-32 border-amber-300">
+                                                <SelectValue placeholder="Select stage..." />
+                                              </SelectTrigger>
+                                              <SelectContent position="popper" className="max-h-[150px]">
+                                                {availableStages.map(s => (
+                                                  <SelectItem key={s.id} value={s.id} className="text-[11px]">{s.name}</SelectItem>
+                                                ))}
+                                              </SelectContent>
+                                            </Select>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                  
+                                  {/* Fallback stage */}
+                                  <div className="pt-2 border-t border-blue-200">
+                                    <div className="flex items-center justify-between">
+                                      <Label className="text-xs font-medium">Fallback Stage (for unmapped)</Label>
+                                      {unmatchedStages.length > 0 && !stageMapping.fallbackStageId && (
+                                        <Badge variant="outline" className="text-[9px] bg-amber-50 text-amber-700">
+                                          {skippedOpportunityCount} will be skipped
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <Select
+                                      value={stageMapping.fallbackStageId || "none"}
+                                      onValueChange={(v) => handleFallbackStageChange(v === "none" ? null : v)}
+                                    >
+                                      <SelectTrigger className="h-8 text-xs bg-white mt-1">
+                                        <SelectValue placeholder="No fallback (skip unmapped)" />
+                                      </SelectTrigger>
+                                      <SelectContent position="popper" className="max-h-[150px]">
+                                        <SelectItem value="none" className="text-xs text-muted-foreground">
+                                          No fallback — skip unmapped opportunities
+                                        </SelectItem>
+                                        {availableStages.map(s => (
+                                          <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  
+                                  {/* Summary */}
+                                  <div className="pt-2 text-[10px] text-muted-foreground bg-white/50 rounded p-2 -mx-1">
+                                    <div className="flex items-center justify-between">
+                                      <span>
+                                        <strong>{autoMatchedStages.reduce((s, p) => s + p.opportunityCount, 0)}</strong> auto-matched, 
+                                        <strong className="ml-1">{manuallyMappedStages.reduce((s, p) => s + p.opportunityCount, 0)}</strong> manually mapped
+                                        {skippedOpportunityCount > 0 && (
+                                          <span className="text-amber-700 ml-1">
+                                            , <strong>{skippedOpportunityCount}</strong> will skip
+                                          </span>
+                                        )}
+                                      </span>
+                                    </div>
+                                  </div>
                                 </div>
                               )}
                             </div>
@@ -811,13 +1023,24 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, savedConf
                           
                           {/* Owner selector - shown when _owner_mapping is selected */}
                           {currentMapping === "_owner_mapping" && (
-                            <div className="mt-2 p-2 bg-purple-50/50 rounded border border-purple-100 space-y-1.5">
+                            <div className="mt-2 p-2 bg-amber-50/50 rounded border border-amber-200 space-y-2">
+                              {/* Warning callout */}
+                              <div className="flex items-start gap-2 p-2 bg-amber-100/50 rounded text-[11px] text-amber-800">
+                                <span className="text-amber-600 text-base leading-none">⚠️</span>
+                                <div>
+                                  <strong>Override Mode:</strong> ALL deals will be assigned to the selected owner, 
+                                  replacing any original owner from Keap.
+                                  <br />
+                                  <span className="text-amber-600">Use "Keap Original Owner" to preserve existing owners.</span>
+                                </div>
+                              </div>
+                              
                               <Select
                                 value={ownerMapping.userId?.toString() || ""}
                                 onValueChange={handleOwnerChange}
                               >
-                                <SelectTrigger className="h-8 text-xs bg-white">
-                                  <SelectValue placeholder="Select owner..." />
+                                <SelectTrigger className="h-8 text-xs bg-white border-amber-300">
+                                  <SelectValue placeholder="Select owner for ALL deals..." />
                                 </SelectTrigger>
                                 <SelectContent position="popper" className="max-h-[250px] w-[280px]">
                                   {users.length === 0 ? (
@@ -840,11 +1063,11 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, savedConf
                                 </SelectContent>
                               </Select>
                               
-                              {/* Show selected owner - compact */}
+                              {/* Show selected owner */}
                               {ownerMapping.userName && (
-                                <div className="flex items-center gap-1 text-[10px] text-green-700">
+                                <div className="flex items-center gap-1 text-[10px] text-amber-700 font-medium">
                                   <Check className="w-3 h-3 flex-shrink-0" />
-                                  <span className="truncate">All deals → {ownerMapping.userName}</span>
+                                  <span className="truncate">⚠️ ALL {opportunities.length} deals → {ownerMapping.userName}</span>
                                 </div>
                               )}
                             </div>

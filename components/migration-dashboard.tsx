@@ -59,6 +59,22 @@ export function MigrationDashboard() {
     data: any[]
   } | null>(null)
   
+  // Migration preview modal
+  const [previewModalOpen, setPreviewModalOpen] = useState(false)
+  const [migrationPreview, setMigrationPreview] = useState<{
+    pipelineId: string
+    pipelineName: string
+    stageMappings: Array<{
+      stageName: string
+      stageId: string
+      count: number
+      isAutoMatched: boolean
+    }>
+    skippedOpps: Array<{ id: string; title: string; stageName: string | null }>
+    totalToMigrate: number
+    totalToSkip: number
+  } | null>(null)
+  
   // Available stages extracted from opportunities
   const [availableStages, setAvailableStages] = useState<StageOption[]>([])
   const [defaultPipelineCreated, setDefaultPipelineCreated] = useState(false)
@@ -300,6 +316,89 @@ export function MigrationDashboard() {
     setCreating(false)
   }
 
+  // Compute migration preview for a pipeline
+  const computeMigrationPreview = (pipeline: Pipeline) => {
+    const stageConfig = fieldMappingConfig?.stageMapping
+    const selectedOpps = opportunities.filter(o => selectedOpportunities.has(o.id))
+    
+    // Check if we have smart stage mapping configured for this pipeline
+    const useSmartStageMapping = stageConfig?.pipelineId === pipeline.id && 
+                                  stageConfig?.perStageMappings && 
+                                  stageConfig.perStageMappings.length > 0
+    
+    const stageMappingsMap = new Map<string, { stageName: string; stageId: string; count: number; isAutoMatched: boolean }>()
+    const skippedOpps: Array<{ id: string; title: string; stageName: string | null }> = []
+    
+    for (const opp of selectedOpps) {
+      const oppStageName = opp.stage?.name || null
+      let targetStageId: string | null = null
+      let targetStageName: string | null = null
+      let isAutoMatched = false
+      
+      if (useSmartStageMapping && stageConfig) {
+        // Use smart mapping
+        const mapping = stageConfig.perStageMappings.find(
+          m => oppStageName && m.opportunityStageName.toLowerCase() === oppStageName.toLowerCase()
+        )
+        
+        if (mapping?.targetStageId && mapping?.targetStageName) {
+          targetStageId = mapping.targetStageId
+          targetStageName = mapping.targetStageName
+          isAutoMatched = mapping.isAutoMatched
+        } else if (stageConfig.fallbackStageId && stageConfig.fallbackStageName) {
+          targetStageId = stageConfig.fallbackStageId
+          targetStageName = stageConfig.fallbackStageName + " (fallback)"
+          isAutoMatched = false
+        }
+      } else {
+        // Use first stage of pipeline (legacy behavior)
+        const firstStage = pipeline.stages?.[0]
+        if (firstStage) {
+          targetStageId = firstStage.id
+          targetStageName = firstStage.name
+          isAutoMatched = false
+        }
+      }
+      
+      if (targetStageId && targetStageName) {
+        const existing = stageMappingsMap.get(targetStageId)
+        if (existing) {
+          existing.count++
+        } else {
+          stageMappingsMap.set(targetStageId, { 
+            stageName: targetStageName, 
+            stageId: targetStageId, 
+            count: 1,
+            isAutoMatched 
+          })
+        }
+      } else {
+        skippedOpps.push({ id: opp.id, title: opp.opportunity_title, stageName: oppStageName })
+      }
+    }
+    
+    const stageMappings = Array.from(stageMappingsMap.values()).sort((a, b) => b.count - a.count)
+    const totalToMigrate = stageMappings.reduce((sum, s) => sum + s.count, 0)
+    
+    setMigrationPreview({
+      pipelineId: pipeline.id,
+      pipelineName: pipeline.name,
+      stageMappings,
+      skippedOpps,
+      totalToMigrate,
+      totalToSkip: skippedOpps.length
+    })
+    setPreviewModalOpen(true)
+  }
+  
+  // Execute migration after preview confirmation
+  const executeMigration = () => {
+    if (!migrationPreview) return
+    const firstStageId = migrationPreview.stageMappings[0]?.stageId || ''
+    setPreviewModalOpen(false)
+    migrateOpportunities(migrationPreview.pipelineId, firstStageId)
+  }
+
   const migrateOpportunities = async (pipelineId: string, stageId: string) => {
     if (selectedOpportunities.size === 0) {
       toast({
@@ -318,20 +417,65 @@ export function MigrationDashboard() {
       
       // Use field mapping config if available
       const useStaticOwner = fieldMappingConfig?.ownerMapping?.userId
-      const useStaticStage = fieldMappingConfig?.stageMapping?.stageId
+      const stageConfig = fieldMappingConfig?.stageMapping
       
-      // Use the stage from field mapping config if set, otherwise use the passed stageId
-      const finalStageId = useStaticStage || stageId
+      // Check if we have smart stage mapping configured
+      const useSmartStageMapping = stageConfig?.perStageMappings && stageConfig.perStageMappings.length > 0
       
-      console.log("[Migration] Creating deals with stage:", finalStageId)
+      console.log("[Migration] Using smart stage mapping:", useSmartStageMapping)
       console.log("[Migration] Field mapping config:", fieldMappingConfig)
+      
+      // Helper function to get stage ID for an opportunity
+      const getStageIdForOpportunity = (opp: Opportunity): string | null => {
+        if (!useSmartStageMapping || !stageConfig) {
+          // Legacy: use single stage ID
+          return stageConfig?.stageId || stageId
+        }
+        
+        const oppStageName = opp.stage?.name
+        if (!oppStageName) {
+          // No stage on opportunity, use fallback
+          return stageConfig.fallbackStageId || null
+        }
+        
+        // Find matching per-stage mapping (case-insensitive)
+        const mapping = stageConfig.perStageMappings.find(
+          m => m.opportunityStageName.toLowerCase() === oppStageName.toLowerCase()
+        )
+        
+        if (mapping?.targetStageId) {
+          return mapping.targetStageId
+        }
+        
+        // No mapping found, use fallback
+        return stageConfig.fallbackStageId || null
+      }
+      
+      // Pre-calculate which opportunities will be skipped
+      const oppsToMigrate: Array<{ opp: Opportunity; stageId: string }> = []
+      const skippedOpps: Opportunity[] = []
+      
+      for (const opp of selectedOpps) {
+        const targetStageId = getStageIdForOpportunity(opp)
+        if (targetStageId) {
+          oppsToMigrate.push({ opp, stageId: targetStageId })
+        } else {
+          skippedOpps.push(opp)
+        }
+      }
+      
+      // Log migration plan
+      console.log(`[Migration] Will migrate ${oppsToMigrate.length}, skip ${skippedOpps.length}`)
+      if (skippedOpps.length > 0) {
+        console.log("[Migration] Skipped opportunities:", skippedOpps.map(o => o.opportunity_title))
+      }
       
       let created = 0
       let failed = 0
       const errors: string[] = []
       const successfullyMigrated: string[] = []
       
-      for (const opp of selectedOpps) {
+      for (const { opp, stageId: finalStageId } of oppsToMigrate) {
         try {
           const dealData: Record<string, any> = {
             name: opp.opportunity_title,
@@ -412,15 +556,21 @@ export function MigrationDashboard() {
         })
       }
 
+      const skippedCount = skippedOpps.length
+      
       if (created > 0) {
+        let description = `Created ${created} deals`
+        if (failed > 0) description += `, ${failed} failed`
+        if (skippedCount > 0) description += `, ${skippedCount} skipped (no stage match)`
+        
         toast({
           title: "Migration Complete",
-          description: `Created ${created} deals${failed > 0 ? ` (${failed} failed)` : ''}`,
+          description,
         })
       } else {
         toast({
           title: "Migration Failed",
-          description: errors[0] || "No deals were created",
+          description: errors[0] || (skippedCount > 0 ? `All ${skippedCount} opportunities skipped (no stage match)` : "No deals were created"),
           variant: "destructive"
         })
       }
@@ -649,11 +799,8 @@ export function MigrationDashboard() {
                                     console.log("[Migrate Button] First stage:", firstStage)
                                     console.log("[Migrate Button] Selected opportunities:", selectedOpportunities.size)
                                     if (firstStage) {
-                                      toast({
-                                        title: "Starting Migration",
-                                        description: `Creating ${selectedOpportunities.size} deals in ${pipeline.name}...`,
-                                      })
-                                      migrateOpportunities(pipeline.id, firstStage.id)
+                                      // Show preview instead of immediate migration
+                                      computeMigrationPreview(pipeline)
                                     } else {
                                       toast({
                                         title: "No Stages",
@@ -668,7 +815,7 @@ export function MigrationDashboard() {
                                     <Loader2 className="w-4 h-4 animate-spin" />
                                   ) : (
                                     <>
-                                      Migrate <ArrowRight className="w-4 h-4 ml-1" />
+                                      Preview <ArrowRight className="w-4 h-4 ml-1" />
                                     </>
                                   )}
                                 </Button>
@@ -723,6 +870,101 @@ export function MigrationDashboard() {
               </pre>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Migration Preview Modal */}
+      <Dialog open={previewModalOpen} onOpenChange={setPreviewModalOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              Migration Preview
+              <Badge variant="outline">{migrationPreview?.pipelineName}</Badge>
+            </DialogTitle>
+          </DialogHeader>
+          
+          {migrationPreview && (
+            <div className="space-y-4">
+              {/* Stage distribution */}
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium">Stage Distribution:</h4>
+                <div className="max-h-48 overflow-auto space-y-1 border rounded-lg p-2 bg-muted/30">
+                  {migrationPreview.stageMappings.map((sm, idx) => (
+                    <div key={idx} className="flex items-center justify-between text-sm py-1 px-2 hover:bg-muted/50 rounded">
+                      <div className="flex items-center gap-2">
+                        {sm.isAutoMatched ? (
+                          <CheckCircle2 className="w-4 h-4 text-green-500" />
+                        ) : (
+                          <ArrowRight className="w-4 h-4 text-blue-500" />
+                        )}
+                        <span className="font-medium">{sm.stageName}</span>
+                      </div>
+                      <Badge variant="secondary">{sm.count} deals</Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              {/* Summary */}
+              <div className="flex items-center justify-between py-2 border-t">
+                <span className="text-sm text-muted-foreground">Total to migrate:</span>
+                <Badge className="bg-green-500">{migrationPreview.totalToMigrate} opportunities</Badge>
+              </div>
+              
+              {/* Skipped warning */}
+              {migrationPreview.totalToSkip > 0 && (
+                <div className="space-y-2">
+                  <Alert variant="destructive" className="bg-amber-50 border-amber-200 text-amber-800">
+                    <AlertCircle className="h-4 w-4 text-amber-600" />
+                    <AlertDescription className="text-amber-800">
+                      <strong>{migrationPreview.totalToSkip} opportunities will be skipped</strong>
+                      <span className="block text-xs mt-1">
+                        These have no matching stage in the target pipeline and no fallback is set.
+                      </span>
+                    </AlertDescription>
+                  </Alert>
+                  
+                  {/* List of skipped */}
+                  <div className="max-h-32 overflow-auto text-xs border rounded p-2 bg-amber-50/50 space-y-1">
+                    {migrationPreview.skippedOpps.slice(0, 10).map((opp, idx) => (
+                      <div key={idx} className="flex items-center gap-2 text-amber-800">
+                        <span>•</span>
+                        <span className="truncate font-medium">{opp.title}</span>
+                        <span className="text-amber-600 text-[10px]">
+                          (stage: {opp.stageName || 'none'})
+                        </span>
+                      </div>
+                    ))}
+                    {migrationPreview.skippedOpps.length > 10 && (
+                      <div className="text-amber-600 text-[10px] italic">
+                        ...and {migrationPreview.skippedOpps.length - 10} more
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              {/* Action buttons */}
+              <div className="flex gap-2 pt-2 border-t">
+                <Button variant="outline" className="flex-1" onClick={() => setPreviewModalOpen(false)}>
+                  {migrationPreview.totalToSkip > 0 ? "Go Back & Map Stages" : "Cancel"}
+                </Button>
+                <Button 
+                  className="flex-1" 
+                  onClick={executeMigration}
+                  disabled={migrating || migrationPreview.totalToMigrate === 0}
+                >
+                  {migrating ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : null}
+                  {migrationPreview.totalToSkip > 0 
+                    ? `Migrate ${migrationPreview.totalToMigrate} (Skip ${migrationPreview.totalToSkip})`
+                    : `Migrate ${migrationPreview.totalToMigrate} Deals`
+                  }
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
