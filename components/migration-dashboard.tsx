@@ -956,16 +956,87 @@ export function MigrationDashboard() {
           <CardContent className="flex-1 px-4 pb-4">
             {/* Build Pipelines Tab - Full Width */}
             <TabsContent value="build" className="mt-0">
-              <PipelineBuilder
-                suggestions={suggestions}
-                onSuggestionsChange={setSuggestions}
-                onCreatePipelines={createPipelines}
-                onAnalyzeWithAI={analyzeOpportunities}
-                isCreating={creating}
-                isAnalyzing={analyzing}
-                availableStages={availableStages}
-                onStageCreated={handleStageCreated}
-              />
+              {/* Show choice if there are existing pipelines and user hasn't chosen yet */}
+              {pipelines.length > 0 && pipelineMode === null ? (
+                <div className="py-8">
+                  <div className="text-center mb-8">
+                    <h3 className="text-xl font-semibold mb-2">How would you like to proceed?</h3>
+                    <p className="text-muted-foreground">
+                      You have {pipelines.length} existing pipeline{pipelines.length > 1 ? 's' : ''} in your Keap account.
+                    </p>
+                  </div>
+                  
+                  <div className="grid md:grid-cols-2 gap-6 max-w-2xl mx-auto">
+                    {/* Use Existing Pipelines */}
+                    <Card 
+                      className="cursor-pointer hover:border-primary hover:bg-primary/5 transition-all group"
+                      onClick={() => {
+                        setPipelineMode("existing")
+                        setActiveTab("migrate")
+                      }}
+                    >
+                      <CardContent className="pt-6 text-center">
+                        <div className="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mx-auto mb-4 group-hover:bg-blue-200 transition-colors">
+                          <FolderOpen className="w-6 h-6" />
+                        </div>
+                        <h4 className="font-semibold mb-2">Use Existing Pipelines</h4>
+                        <p className="text-sm text-muted-foreground mb-4">
+                          Migrate opportunities to one of your {pipelines.length} existing pipeline{pipelines.length > 1 ? 's' : ''}.
+                        </p>
+                        <Badge variant="secondary" className="mb-2">
+                          {pipelines.map(p => p.name).slice(0, 3).join(", ")}
+                          {pipelines.length > 3 ? ` +${pipelines.length - 3} more` : ""}
+                        </Badge>
+                      </CardContent>
+                    </Card>
+                    
+                    {/* Build New Pipelines */}
+                    <Card 
+                      className="cursor-pointer hover:border-primary hover:bg-primary/5 transition-all group"
+                      onClick={() => setPipelineMode("build")}
+                    >
+                      <CardContent className="pt-6 text-center">
+                        <div className="w-12 h-12 rounded-full bg-green-100 text-green-600 flex items-center justify-center mx-auto mb-4 group-hover:bg-green-200 transition-colors">
+                          <Hammer className="w-6 h-6" />
+                        </div>
+                        <h4 className="font-semibold mb-2">Build New Pipelines</h4>
+                        <p className="text-sm text-muted-foreground mb-4">
+                          Create new pipelines from your opportunity stages and migrate to them.
+                        </p>
+                        <Badge variant="outline">
+                          {availableStages.length} unique stages found
+                        </Badge>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Back button when in build mode and pipelines exist */}
+                  {pipelines.length > 0 && pipelineMode === "build" && (
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="mb-4"
+                      onClick={() => setPipelineMode(null)}
+                    >
+                      <ArrowLeft className="w-4 h-4 mr-2" />
+                      Back to options
+                    </Button>
+                  )}
+                  
+                  <PipelineBuilder
+                    suggestions={suggestions}
+                    onSuggestionsChange={setSuggestions}
+                    onCreatePipelines={createPipelines}
+                    onAnalyzeWithAI={analyzeOpportunities}
+                    isCreating={creating}
+                    isAnalyzing={analyzing}
+                    availableStages={availableStages}
+                    onStageCreated={handleStageCreated}
+                  />
+                </>
+              )}
             </TabsContent>
 
             {/* Field Mapping Tab */}
