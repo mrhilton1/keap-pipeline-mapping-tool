@@ -29,6 +29,7 @@ export function MigrationDashboard() {
   const [opportunities, setOpportunities] = useState<Opportunity[]>([])
   const [pipelines, setPipelines] = useState<Pipeline[]>([])
   const [selectedOpportunities, setSelectedOpportunities] = useState<Set<string>>(new Set())
+  const [migratedOpportunities, setMigratedOpportunities] = useState<Set<string>>(new Set())
   const [suggestions, setSuggestions] = useState<PipelineSuggestion[]>([])
   
   const [loading, setLoading] = useState(true)
@@ -235,6 +236,7 @@ export function MigrationDashboard() {
       let created = 0
       let failed = 0
       const errors: string[] = []
+      const successfullyMigrated: string[] = []
       
       for (const opp of selectedOpps) {
         try {
@@ -276,6 +278,7 @@ export function MigrationDashboard() {
           
           if (response.ok) {
             created++
+            successfullyMigrated.push(opp.id)
           } else {
             const errorData = await response.json()
             errors.push(`${opp.opportunity_title}: ${errorData.details || errorData.error}`)
@@ -285,6 +288,15 @@ export function MigrationDashboard() {
           errors.push(`${opp.opportunity_title}: ${err instanceof Error ? err.message : 'Unknown error'}`)
           failed++
         }
+      }
+      
+      // Mark successfully migrated opportunities
+      if (successfullyMigrated.length > 0) {
+        setMigratedOpportunities(prev => {
+          const newSet = new Set(prev)
+          successfullyMigrated.forEach(id => newSet.add(id))
+          return newSet
+        })
       }
 
       if (created > 0) {
@@ -421,6 +433,7 @@ export function MigrationDashboard() {
               opportunities={opportunities}
               selectedIds={selectedOpportunities}
               onSelectionChange={setSelectedOpportunities}
+              migratedIds={migratedOpportunities}
             />
           </CardContent>
         </Card>

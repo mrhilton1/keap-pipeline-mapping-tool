@@ -64,11 +64,13 @@ interface OpportunitiesPanelProps {
   opportunities: Opportunity[]
   selectedIds: Set<string>
   onSelectionChange: (ids: Set<string>) => void
+  migratedIds?: Set<string>
   loading?: boolean
 }
 
 export function OpportunitiesPanel({ 
-  opportunities, 
+  opportunities,
+  migratedIds = new Set(), 
   selectedIds, 
   onSelectionChange,
   loading 
@@ -108,9 +110,14 @@ export function OpportunitiesPanel({
     return matchesSearch && matchesStage
   })
 
+  // Filter out already migrated opportunities for selection
+  const selectableFiltered = filtered.filter(o => !migratedIds.has(o.id))
+  const migratedCount = filtered.filter(o => migratedIds.has(o.id)).length
+
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      onSelectionChange(new Set(filtered.map(o => o.id)))
+      // Only select non-migrated opportunities
+      onSelectionChange(new Set(selectableFiltered.map(o => o.id)))
     } else {
       onSelectionChange(new Set())
     }
@@ -215,9 +222,13 @@ export function OpportunitiesPanel({
             // @ts-ignore - indeterminate is valid but not in types
             indeterminate={someSelected}
             onCheckedChange={handleSelectAll}
+            disabled={selectableFiltered.length === 0}
           />
           <span className="text-sm text-muted-foreground">
-            {allSelected ? 'Deselect all' : 'Select all'} ({filtered.length})
+            {allSelected ? 'Deselect all' : 'Select all'} ({selectableFiltered.length})
+            {migratedCount > 0 && (
+              <span className="text-green-600 ml-1">• {migratedCount} migrated</span>
+            )}
           </span>
         </div>
       </div>
@@ -232,6 +243,7 @@ export function OpportunitiesPanel({
           ) : (
             filtered.map(opp => {
               const isSelected = selectedIds.has(opp.id)
+              const isMigrated = migratedIds.has(opp.id)
               const isExpanded = expandedIds.has(opp.id)
               const revenue = formatRevenue(opp)
               const contact = formatContact(opp)
@@ -242,28 +254,41 @@ export function OpportunitiesPanel({
                 <Card 
                   key={opp.id} 
                   className={`transition-colors ${
-                    isSelected ? 'border-primary bg-primary/5' : 'hover:bg-muted/30'
+                    isMigrated 
+                      ? 'border-green-500 bg-green-50/50 opacity-75' 
+                      : isSelected 
+                        ? 'border-primary bg-primary/5' 
+                        : 'hover:bg-muted/30'
                   }`}
                 >
                   <CardContent className="p-0">
                     {/* Main row - always visible */}
                     <div 
                       className="flex items-start gap-3 p-3 cursor-pointer"
-                      onClick={() => handleSelectOne(opp.id, !isSelected)}
+                      onClick={() => !isMigrated && handleSelectOne(opp.id, !isSelected)}
                     >
                       <Checkbox
                         checked={isSelected}
-                        onCheckedChange={(checked) => handleSelectOne(opp.id, checked as boolean)}
+                        onCheckedChange={(checked) => !isMigrated && handleSelectOne(opp.id, checked as boolean)}
                         onClick={(e) => e.stopPropagation()}
                         className="mt-0.5"
+                        disabled={isMigrated}
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-2">
-                          <h4 className="font-medium text-sm">
+                          <h4 className={`font-medium text-sm ${isMigrated ? 'line-through text-muted-foreground' : ''}`}>
                             {opp.opportunity_title}
                           </h4>
                           <div className="flex items-center gap-1 flex-shrink-0">
-                            {opp.stage && (
+                            {isMigrated && (
+                              <Badge 
+                                variant="outline" 
+                                className="text-xs bg-green-100 text-green-700 border-green-300"
+                              >
+                                ✓ Migrated
+                              </Badge>
+                            )}
+                            {opp.stage && !isMigrated && (
                               <Badge 
                                 variant="secondary" 
                                 className="text-xs"
