@@ -1,6 +1,6 @@
 import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
-import { KeapClient } from "@/lib/keap-client"
+import { KeapClient, CreateDealRequest } from "@/lib/keap-client"
 
 export async function GET() {
   try {
@@ -25,6 +25,25 @@ export async function GET() {
   }
 }
 
+interface DealRequestBody {
+  name: string
+  stage_id: string
+  contact_id?: string
+  owner_id?: string | number
+  value?: number
+  currency?: string
+  estimated_close_time?: string
+  status?: "OPEN" | "WON" | "LOST"
+  custom_fields?: Record<string, any>
+  task_ids?: string[]
+  // Notes to create after deal
+  notes?: Array<{
+    body: string
+    created_by?: string
+    created_time?: string
+  }>
+}
+
 export async function POST(request: Request) {
   try {
     const cookieStore = await cookies()
@@ -34,8 +53,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
     }
 
-    const body = await request.json()
-    const { name, stage_id, contact_id, owner_id, value, currency, estimated_close_time } = body
+    const body: DealRequestBody = await request.json()
+    const { 
+      name, 
+      stage_id, 
+      contact_id, 
+      owner_id, 
+      value, 
+      currency = "USD", 
+      estimated_close_time,
+      status = "OPEN",
+      custom_fields,
+      task_ids = [],
+      notes = []
+    } = body
 
     if (!name || !stage_id) {
       return NextResponse.json({ 
@@ -45,43 +76,85 @@ export async function POST(request: Request) {
     }
 
     console.log(`[Deals API] Creating deal: ${name} in stage ${stage_id}`)
+    console.log("[Deals API] Version: 2026-02-03-v3")  // Version marker
     
-    // Build v2 API request - ALL fields are REQUIRED per API errors
-    const dealRequest: any = { 
+    // Build v2 API request with correct schema
+    const dealRequest: CreateDealRequest = { 
       name, 
       stage_id,
-      status: "OPEN",                    // REQUIRED: OPEN, WON, LOST
-      owners: [],                        // REQUIRED: array (can be empty)
-      contacts: [],                      // REQUIRED: array (can be empty)
-      taskIds: [],                       // REQUIRED: array (can be empty)
-      value: {                           // REQUIRED: value object
+      status,                                     // OPEN, WON, or LOST
+      owners: [],                                 // Array of { id: string }
+      contacts: [],                               // Array of { id: string, primary_contact: boolean }
+      task_ids: task_ids,                         // Array of task IDs
+      value: {
         amount: value ? Number(value) : 0,
-        currency: currency || "USD"
+        currency: currency
       }
     }
     
-    // Add contact to contacts array if provided
+    // Add contact with primary_contact flag
     if (contact_id) {
-      dealRequest.contacts = [{ id: String(contact_id) }]
+      dealRequest.contacts = [{ 
+        id: String(contact_id), 
+        primary_contact: true 
+      }]
     }
     
-    // Add owner to owners array if provided
+    // Add owner as string ID
     if (owner_id) {
-      dealRequest.owners = [{ id: Number(owner_id) }]
+      dealRequest.owners = [{ id: String(owner_id) }]
     }
     
-    // Add estimated close time if provided
+    // Add estimated close time
     if (estimated_close_time) {
       dealRequest.estimated_close_time = estimated_close_time
     }
+    
+    // Add custom fields
+    if (custom_fields && Object.keys(custom_fields).length > 0) {
+      dealRequest.custom_fields = custom_fields
+    }
 
-    console.log("[Deals API] Request body:", JSON.stringify(dealRequest))
-    console.log("[Deals API] Version: 2024-02-03-v2")  // Version marker to verify deploy
+    console.log("[Deals API] Request body:", JSON.stringify(dealRequest, null, 2))
     
     const client = new KeapClient(accessToken.value)
     const deal = await client.createDeal(dealRequest)
 
     console.log("[Deals API] Deal created:", deal.id)
+    
+    // Create notes if provided (oldest first)
+    if (notes.length > 0 && deal.id) {
+      console.log(`[Deals API] Creating ${notes.length} notes for deal ${deal.id}`)
+      
+      // Sort notes by created_time if available (oldest first)
+      const sortedNotes = [...notes].sort((a, b) => {
+        if (!a.created_time || !b.created_time) return 0
+        return new Date(a.created_time).getTime() - new Date(b.created_time).getTime()
+      })
+      
+      for (const note of sortedNotes) {
+        try {
+          const noteRequest: any = { body: note.body }
+          
+          // Try to set created_by if provided
+          if (note.created_by) {
+            noteRequest.created_by = String(note.created_by)
+          }
+          
+          // Try to set created_time if provided (API may or may not accept this)
+          if (note.created_time) {
+            noteRequest.created_time = note.created_time
+          }
+          
+          console.log(`[Deals API] Creating note: ${note.body.substring(0, 50)}...`)
+          await client.createDealNote(deal.id, noteRequest)
+        } catch (noteErr) {
+          console.error(`[Deals API] Failed to create note:`, noteErr)
+          // Continue with other notes even if one fails
+        }
+      }
+    }
+
     return NextResponse.json(deal)
   } catch (error: any) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error"

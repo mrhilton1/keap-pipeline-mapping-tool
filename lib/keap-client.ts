@@ -111,15 +111,42 @@ export interface CreateDealRequest {
   name: string
   stage_id: string
   status: "OPEN" | "WON" | "LOST"        // Required
-  owners: Array<{ id: number }>           // Required (can be empty)
-  taskIds: string[]                       // Required (can be empty)
+  owners: Array<{ id: string }>           // Required - array with owner IDs
+  task_ids: string[]                      // Required (can be empty)
   value: {                                // Required
     amount: number
     currency: string
   }
-  contacts?: Array<{ id: string }>
+  contacts: Array<{ id: string; primary_contact: boolean }>  // Required
   estimated_close_time?: string
   custom_fields?: Record<string, any>
+}
+
+export interface CreateDealNoteRequest {
+  body: string
+  created_by?: string       // Owner ID who created the note
+  created_time?: string     // ISO timestamp - may or may not be writable
+}
+
+export interface KeapDealNote {
+  id: string
+  deal_id: string
+  body: string
+  created_by?: string
+  created_time?: string
+  modified_time?: string
+}
+
+// Pipeline Outcomes
+export interface KeapPipelineOutcome {
+  id: string
+  stage_id: string
+  stage_name?: string
+  outcome_type: "WON" | "LOST"
+}
+
+export interface KeapPipelineOutcomesResponse {
+  outcomes: KeapPipelineOutcome[]
 }
 
 // Custom Field Types
@@ -291,6 +318,14 @@ export class KeapClient {
     )
   }
 
+  async getPipelineOutcomes(pipelineId: string): Promise<KeapPipelineOutcomesResponse> {
+    return this.request<KeapPipelineOutcomesResponse>(
+      this.pipelinesBaseUrl,
+      `/pipelines/${pipelineId}/outcomes`,
+      { method: "GET" }
+    )
+  }
+
   // ============ New v2 API Methods (Stages) ============
 
   async getStages(pageSize = 100): Promise<KeapStagesResponse> {
@@ -360,6 +395,17 @@ export class KeapClient {
       this.pipelinesBaseUrl,
       `/stages/${stageId}/deals`,
       { method: "GET" }
+    )
+  }
+
+  async createDealNote(dealId: string, data: CreateDealNoteRequest): Promise<KeapDealNote> {
+    return this.request<KeapDealNote>(
+      this.pipelinesBaseUrl,
+      `/deals/${dealId}/notes`,
+      {
+        method: "POST",
+        body: JSON.stringify(data)
+      }
     )
   }
 

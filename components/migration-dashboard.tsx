@@ -15,7 +15,10 @@ import {
   LogIn,
   ExternalLink
 } from "lucide-react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
+import { ChevronLeft, ChevronRight, User, DollarSign, FileText, Calendar } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { OpportunitiesPanel, Opportunity } from "./opportunities-panel"
 import { PipelineBuilder, PipelineSuggestion } from "./pipeline-builder"
@@ -59,8 +62,31 @@ export function MigrationDashboard() {
     data: any[]
   } | null>(null)
   
-  // Migration preview modal
+  // Currency selector
+  const [currency, setCurrency] = useState("USD")
+  const CURRENCIES = [
+    { value: "USD", label: "USD - US Dollar" },
+    { value: "EUR", label: "EUR - Euro" },
+    { value: "GBP", label: "GBP - British Pound" },
+    { value: "CAD", label: "CAD - Canadian Dollar" },
+    { value: "AUD", label: "AUD - Australian Dollar" },
+    { value: "NZD", label: "NZD - New Zealand Dollar" },
+    { value: "CHF", label: "CHF - Swiss Franc" },
+    { value: "JPY", label: "JPY - Japanese Yen" },
+    { value: "INR", label: "INR - Indian Rupee" },
+    { value: "BRL", label: "BRL - Brazilian Real" },
+    { value: "MXN", label: "MXN - Mexican Peso" },
+  ]
+  
+  // Pipeline outcomes
+  const [outcomesModalOpen, setOutcomesModalOpen] = useState(false)
+  const [pipelineOutcomes, setPipelineOutcomes] = useState<Record<string, "OPEN" | "WON" | "LOST">>({})
+  const [selectedPipelineForOutcomes, setSelectedPipelineForOutcomes] = useState<Pipeline | null>(null)
+  const [outcomesConfigured, setOutcomesConfigured] = useState(false)
+  
+  // Migration preview modal - enhanced with individual opportunity details
   const [previewModalOpen, setPreviewModalOpen] = useState(false)
+  const [previewIndex, setPreviewIndex] = useState(0)  // For carousel navigation
   const [migrationPreview, setMigrationPreview] = useState<{
     pipelineId: string
     pipelineName: string
@@ -69,10 +95,21 @@ export function MigrationDashboard() {
       stageId: string
       count: number
       isAutoMatched: boolean
+      status: "OPEN" | "WON" | "LOST"
     }>
     skippedOpps: Array<{ id: string; title: string; stageName: string | null }>
     totalToMigrate: number
     totalToSkip: number
+    // Enhanced: individual opportunity details
+    opportunityDetails: Array<{
+      opportunity: Opportunity
+      targetStageName: string
+      targetStageId: string
+      targetStatus: "OPEN" | "WON" | "LOST"
+      value: number
+      hasNotes: boolean
+      noteCount: number
+    }>
   } | null>(null)
   
   // Available stages extracted from opportunities
@@ -316,8 +353,64 @@ export function MigrationDashboard() {
     setCreating(false)
   }
 
+  // Check pipeline outcomes and show config modal if needed
+  const checkPipelineOutcomes = async (pipeline: Pipeline) => {
+    try {
+      const response = await fetch(`/api/pipelines/${pipeline.id}/outcomes`)
+      const data = await response.json()
+      
+      if (data.outcomes && data.outcomes.length > 0) {
+        // Pipeline has outcomes configured - use them
+        const outcomeMap: Record<string, "OPEN" | "WON" | "LOST"> = {}
+        pipeline.stages?.forEach(stage => {
+          const outcome = data.outcomes.find((o: any) => o.stage_id === stage.id)
+          outcomeMap[stage.id] = outcome?.outcome_type || "OPEN"
+        })
+        setPipelineOutcomes(outcomeMap)
+        setOutcomesConfigured(true)
+        computeMigrationPreview(pipeline, outcomeMap)
+      } else {
+        // No outcomes - show config modal
+        setSelectedPipelineForOutcomes(pipeline)
+        // Initialize all stages as OPEN
+        const defaultOutcomes: Record<string, "OPEN" | "WON" | "LOST"> = {}
+        pipeline.stages?.forEach(stage => {
+          defaultOutcomes[stage.id] = "OPEN"
+        })
+        setPipelineOutcomes(defaultOutcomes)
+        setOutcomesConfigured(false)
+        setOutcomesModalOpen(true)
+      }
+    } catch (err) {
+      console.error("Failed to fetch outcomes:", err)
+      // Default all to OPEN and proceed
+      const defaultOutcomes: Record<string, "OPEN" | "WON" | "LOST"> = {}
+      pipeline.stages?.forEach(stage => {
+        defaultOutcomes[stage.id] = "OPEN"
+      })
+      setPipelineOutcomes(defaultOutcomes)
+      computeMigrationPreview(pipeline, defaultOutcomes)
+    }
+  }
+  
+  // Calculate value for an opportunity
+  const calculateValue = (opp: Opportunity): number => {
+    const revenueHigh = opp.projected_revenue_high || 0
+    const revenueLow = opp.projected_revenue_low || 0
+    const useAverage = fieldMappingConfig?.mappings?.some(
+      m => m.sourceField === "projected_revenue_high" && m.targetField === "value.average"
+    ) || fieldMappingConfig?.mappings?.some(
+      m => m.sourceField === "projected_revenue_low" && m.targetField === "value.average"
+    )
+    
+    if (useAverage && revenueHigh > 0 && revenueLow > 0) {
+      return Math.round((revenueHigh + revenueLow) / 2)
+    }
+    return revenueHigh || revenueLow
+  }
+
   // Compute migration preview for a pipeline
-  const computeMigrationPreview = (pipeline: Pipeline) => {
+  const computeMigrationPreview = (pipeline: Pipeline, outcomes: Record<string, "OPEN" | "WON" | "LOST"> = pipelineOutcomes) => {
     const stageConfig = fieldMappingConfig?.stageMapping
     const selectedOpps = opportunities.filter(o => selectedOpportunities.has(o.id))
     
@@ -326,8 +419,17 @@ export function MigrationDashboard() {
                                   stageConfig?.perStageMappings && 
                                   stageConfig.perStageMappings.length > 0
     
-    const stageMappingsMap = new Map<string, { stageName: string; stageId: string; count: number; isAutoMatched: boolean }>()
+    const stageMappingsMap = new Map<string, { stageName: string; stageId: string; count: number; isAutoMatched: boolean; status: "OPEN" | "WON" | "LOST" }>()
     const skippedOpps: Array<{ id: string; title: string; stageName: string | null }> = []
+    const opportunityDetails: Array<{
+      opportunity: Opportunity
+      targetStageName: string
+      targetStageId: string
+      targetStatus: "OPEN" | "WON" | "LOST"
+      value: number
+      hasNotes: boolean
+      noteCount: number
+    }> = []
     
     for (const opp of selectedOpps) {
       const oppStageName = opp.stage?.name || null
@@ -361,6 +463,7 @@ export function MigrationDashboard() {
       }
       
       if (targetStageId && targetStageName) {
+        const status = outcomes[targetStageId] || "OPEN"
         const existing = stageMappingsMap.get(targetStageId)
         if (existing) {
           existing.count++
@@ -369,9 +472,22 @@ export function MigrationDashboard() {
             stageName: targetStageName, 
             stageId: targetStageId, 
             count: 1,
-            isAutoMatched 
+            isAutoMatched,
+            status
           })
         }
+        
+        // Add opportunity details for carousel
+        const noteCount = (opp.opportunity_notes ? 1 : 0) + (opp.next_action_notes ? 1 : 0)
+        opportunityDetails.push({
+          opportunity: opp,
+          targetStageName,
+          targetStageId,
+          targetStatus: status,
+          value: calculateValue(opp),
+          hasNotes: noteCount > 0,
+          noteCount
+        })
       } else {
         skippedOpps.push({ id: opp.id, title: opp.opportunity_title, stageName: oppStageName })
       }
@@ -386,9 +502,20 @@ export function MigrationDashboard() {
       stageMappings,
       skippedOpps,
       totalToMigrate,
-      totalToSkip: skippedOpps.length
+      totalToSkip: skippedOpps.length,
+      opportunityDetails
     })
+    setPreviewIndex(0)
     setPreviewModalOpen(true)
+  }
+  
+  // Confirm outcomes and proceed to preview
+  const confirmOutcomes = () => {
+    if (selectedPipelineForOutcomes) {
+      setOutcomesConfigured(true)
+      setOutcomesModalOpen(false)
+      computeMigrationPreview(selectedPipelineForOutcomes, pipelineOutcomes)
+    }
   }
   
   // Execute migration after preview confirmation
@@ -424,41 +551,44 @@ export function MigrationDashboard() {
       
       console.log("[Migration] Using smart stage mapping:", useSmartStageMapping)
       console.log("[Migration] Field mapping config:", fieldMappingConfig)
+      console.log("[Migration] Using currency:", currency)
       
-      // Helper function to get stage ID for an opportunity
-      const getStageIdForOpportunity = (opp: Opportunity): string | null => {
+      // Helper function to get stage ID and status for an opportunity
+      const getStageInfoForOpportunity = (opp: Opportunity): { stageId: string; status: "OPEN" | "WON" | "LOST" } | null => {
+        let targetStageId: string | null = null
+        
         if (!useSmartStageMapping || !stageConfig) {
           // Legacy: use single stage ID
-          return stageConfig?.stageId || stageId
+          targetStageId = stageConfig?.stageId || stageId
+        } else {
+          const oppStageName = opp.stage?.name
+          if (!oppStageName) {
+            // No stage on opportunity, use fallback
+            targetStageId = stageConfig.fallbackStageId || null
+          } else {
+            // Find matching per-stage mapping (case-insensitive)
+            const mapping = stageConfig.perStageMappings.find(
+              m => m.opportunityStageName.toLowerCase() === oppStageName.toLowerCase()
+            )
+            targetStageId = mapping?.targetStageId || stageConfig.fallbackStageId || null
+          }
         }
         
-        const oppStageName = opp.stage?.name
-        if (!oppStageName) {
-          // No stage on opportunity, use fallback
-          return stageConfig.fallbackStageId || null
-        }
+        if (!targetStageId) return null
         
-        // Find matching per-stage mapping (case-insensitive)
-        const mapping = stageConfig.perStageMappings.find(
-          m => m.opportunityStageName.toLowerCase() === oppStageName.toLowerCase()
-        )
-        
-        if (mapping?.targetStageId) {
-          return mapping.targetStageId
-        }
-        
-        // No mapping found, use fallback
-        return stageConfig.fallbackStageId || null
+        // Get status from pipeline outcomes config
+        const status = pipelineOutcomes[targetStageId] || "OPEN"
+        return { stageId: targetStageId, status }
       }
       
       // Pre-calculate which opportunities will be skipped
-      const oppsToMigrate: Array<{ opp: Opportunity; stageId: string }> = []
+      const oppsToMigrate: Array<{ opp: Opportunity; stageId: string; status: "OPEN" | "WON" | "LOST" }> = []
       const skippedOpps: Opportunity[] = []
       
       for (const opp of selectedOpps) {
-        const targetStageId = getStageIdForOpportunity(opp)
-        if (targetStageId) {
-          oppsToMigrate.push({ opp, stageId: targetStageId })
+        const stageInfo = getStageInfoForOpportunity(opp)
+        if (stageInfo) {
+          oppsToMigrate.push({ opp, stageId: stageInfo.stageId, status: stageInfo.status })
         } else {
           skippedOpps.push(opp)
         }
@@ -475,11 +605,60 @@ export function MigrationDashboard() {
       const errors: string[] = []
       const successfullyMigrated: string[] = []
       
-      for (const { opp, stageId: finalStageId } of oppsToMigrate) {
+      for (const { opp, stageId: finalStageId, status } of oppsToMigrate) {
         try {
+          // Build notes array
+          const notes: Array<{ body: string; created_by?: string; created_time?: string }> = []
+          
+          // Add opportunity notes (oldest first)
+          if (opp.opportunity_notes && opp.opportunity_notes.trim()) {
+            notes.push({
+              body: opp.opportunity_notes,
+              created_by: opp.user?.id?.toString(),
+              created_time: opp.date_created
+            })
+          }
+          
+          // Add next action notes with prefix
+          if (opp.next_action_notes && opp.next_action_notes.trim()) {
+            notes.push({
+              body: `NEXT ACTION: ${opp.next_action_notes}`,
+              created_by: opp.user?.id?.toString(),
+              created_time: opp.next_action_date || opp.last_updated
+            })
+          }
+          
+          // Add value - check if using average or single amount
+          const revenueHigh = opp.projected_revenue_high || 0
+          const revenueLow = opp.projected_revenue_low || 0
+          const useAverage = fieldMappingConfig?.mappings?.some(
+            m => m.sourceField === "projected_revenue_high" && m.targetField === "value.average"
+          ) || fieldMappingConfig?.mappings?.some(
+            m => m.sourceField === "projected_revenue_low" && m.targetField === "value.average"
+          )
+          
+          let finalValue = 0
+          if (revenueHigh > 0 || revenueLow > 0) {
+            if (useAverage && revenueHigh > 0 && revenueLow > 0) {
+              // Both values exist - use average
+              finalValue = Math.round((revenueHigh + revenueLow) / 2)
+              console.log(`[Migration] Value (Average): (${revenueLow} + ${revenueHigh}) / 2 = ${finalValue}`)
+            } else {
+              // Use whichever value exists (or high if both, when not averaging)
+              finalValue = revenueHigh || revenueLow
+              console.log(`[Migration] Value (Single): ${finalValue}`)
+            }
+          }
+          
+          // Build deal request with correct v2 API schema
           const dealData: Record<string, any> = {
             name: opp.opportunity_title,
             stage_id: finalStageId,
+            status: status,                    // OPEN, WON, or LOST based on outcomes
+            value: finalValue,
+            currency: currency,                // User-selected currency
+            task_ids: [],                      // Empty for now - no task mapping implemented
+            notes: notes                       // Will be created after deal
           }
           
           // Add contact if available
@@ -494,38 +673,12 @@ export function MigrationDashboard() {
             dealData.owner_id = opp.user.id
           }
           
-          // Add value - check if using average or single amount
-          const revenueHigh = opp.projected_revenue_high || 0
-          const revenueLow = opp.projected_revenue_low || 0
-          const useAverage = fieldMappingConfig?.mappings?.some(
-            m => m.sourceField === "projected_revenue_high" && m.targetField === "value.average"
-          ) || fieldMappingConfig?.mappings?.some(
-            m => m.sourceField === "projected_revenue_low" && m.targetField === "value.average"
-          )
-          
-          if (revenueHigh > 0 || revenueLow > 0) {
-            let finalValue: number
-            
-            if (useAverage && revenueHigh > 0 && revenueLow > 0) {
-              // Both values exist - use average
-              finalValue = Math.round((revenueHigh + revenueLow) / 2)
-              console.log(`[Migration] Value (Average): (${revenueLow} + ${revenueHigh}) / 2 = ${finalValue}`)
-            } else {
-              // Use whichever value exists (or high if both, when not averaging)
-              finalValue = revenueHigh || revenueLow
-              console.log(`[Migration] Value (Single): ${finalValue}`)
-            }
-            
-            dealData.value = finalValue
-            dealData.currency = "USD"
-          }
-          
           // Add estimated close date
           if (opp.estimated_close_date) {
             dealData.estimated_close_time = opp.estimated_close_date
           }
           
-          console.log("[Migration] Creating deal:", dealData.name)
+          console.log("[Migration] Creating deal:", dealData.name, "status:", status)
           
           const response = await fetch("/api/deals", {
             method: "POST",
@@ -775,6 +928,32 @@ export function MigrationDashboard() {
                           {selectedOpportunities.size} opportunities selected for migration
                         </AlertDescription>
                       </Alert>
+                      
+                      {/* Currency Selector */}
+                      <Card className="border-dashed">
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <Label className="text-sm font-medium">Currency</Label>
+                              <p className="text-xs text-muted-foreground">
+                                Deal values will use this currency
+                              </p>
+                            </div>
+                            <Select value={currency} onValueChange={setCurrency}>
+                              <SelectTrigger className="w-48">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {CURRENCIES.map(c => (
+                                  <SelectItem key={c.value} value={c.value}>
+                                    {c.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </CardContent>
+                      </Card>
 
                       <div className="space-y-3">
                         <h4 className="font-medium">Select destination pipeline:</h4>
@@ -799,8 +978,8 @@ export function MigrationDashboard() {
                                     console.log("[Migrate Button] First stage:", firstStage)
                                     console.log("[Migrate Button] Selected opportunities:", selectedOpportunities.size)
                                     if (firstStage) {
-                                      // Show preview instead of immediate migration
-                                      computeMigrationPreview(pipeline)
+                                      // Check outcomes first, then show preview
+                                      checkPipelineOutcomes(pipeline)
                                     } else {
                                       toast({
                                         title: "No Stages",
@@ -873,22 +1052,98 @@ export function MigrationDashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* Migration Preview Modal */}
+      {/* Pipeline Outcomes Configuration Modal */}
+      <Dialog open={outcomesModalOpen} onOpenChange={setOutcomesModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-amber-500" />
+              Configure Pipeline Outcomes
+            </DialogTitle>
+            <DialogDescription>
+              This pipeline doesn't have outcomes configured. Please specify which stages represent deal outcomes.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedPipelineForOutcomes && (
+            <div className="space-y-4">
+              <div className="max-h-64 overflow-auto space-y-2 border rounded-lg p-3 bg-muted/30">
+                {selectedPipelineForOutcomes.stages?.map((stage) => (
+                  <div key={stage.id} className="flex items-center justify-between gap-4 p-2 bg-background rounded-md">
+                    <span className="font-medium text-sm">{stage.name}</span>
+                    <Select
+                      value={pipelineOutcomes[stage.id] || "OPEN"}
+                      onValueChange={(value: "OPEN" | "WON" | "LOST") => {
+                        setPipelineOutcomes(prev => ({ ...prev, [stage.id]: value }))
+                      }}
+                    >
+                      <SelectTrigger className="w-40 h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="OPEN">
+                          <span className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-blue-500" />
+                            In Progress (OPEN)
+                          </span>
+                        </SelectItem>
+                        <SelectItem value="WON">
+                          <span className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-green-500" />
+                            Won (WON)
+                          </span>
+                        </SelectItem>
+                        <SelectItem value="LOST">
+                          <span className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-red-500" />
+                            Lost (LOST)
+                          </span>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ))}
+              </div>
+              
+              <Alert className="bg-blue-50 border-blue-200">
+                <AlertCircle className="h-4 w-4 text-blue-500" />
+                <AlertDescription className="text-blue-800 text-xs">
+                  Deals will be assigned a status based on their target stage. This affects reporting and pipeline analytics.
+                </AlertDescription>
+              </Alert>
+              
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setOutcomesModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={confirmOutcomes}>
+                  Continue to Preview
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Migration Preview Modal - Enhanced with Carousel */}
       <Dialog open={previewModalOpen} onOpenChange={setPreviewModalOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               Migration Preview
               <Badge variant="outline">{migrationPreview?.pipelineName}</Badge>
+              <Badge variant="secondary" className="ml-auto">
+                {currency}
+              </Badge>
             </DialogTitle>
           </DialogHeader>
           
           {migrationPreview && (
-            <div className="space-y-4">
-              {/* Stage distribution */}
+            <div className="flex flex-col gap-4 flex-1 overflow-hidden">
+              {/* Stage distribution summary */}
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Stage Distribution:</h4>
-                <div className="max-h-48 overflow-auto space-y-1 border rounded-lg p-2 bg-muted/30">
+                <div className="max-h-32 overflow-auto space-y-1 border rounded-lg p-2 bg-muted/30">
                   {migrationPreview.stageMappings.map((sm, idx) => (
                     <div key={idx} className="flex items-center justify-between text-sm py-1 px-2 hover:bg-muted/50 rounded">
                       <div className="flex items-center gap-2">
@@ -898,12 +1153,134 @@ export function MigrationDashboard() {
                           <ArrowRight className="w-4 h-4 text-blue-500" />
                         )}
                         <span className="font-medium">{sm.stageName}</span>
+                        <Badge 
+                          className={`text-[10px] px-1.5 py-0 ${
+                            sm.status === "WON" ? "bg-green-100 text-green-800" :
+                            sm.status === "LOST" ? "bg-red-100 text-red-800" :
+                            "bg-blue-100 text-blue-800"
+                          }`}
+                        >
+                          {sm.status}
+                        </Badge>
                       </div>
                       <Badge variant="secondary">{sm.count} deals</Badge>
                     </div>
                   ))}
                 </div>
               </div>
+              
+              {/* Individual Opportunity Carousel */}
+              {migrationPreview.opportunityDetails && migrationPreview.opportunityDetails.length > 0 && (
+                <div className="border rounded-lg p-4 bg-muted/20">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-medium">Deal Preview</h4>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => setPreviewIndex(Math.max(0, previewIndex - 1))}
+                        disabled={previewIndex === 0}
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </Button>
+                      <span className="text-xs text-muted-foreground min-w-[60px] text-center">
+                        {previewIndex + 1} of {migrationPreview.opportunityDetails.length}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => setPreviewIndex(Math.min(migrationPreview.opportunityDetails.length - 1, previewIndex + 1))}
+                        disabled={previewIndex >= migrationPreview.opportunityDetails.length - 1}
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  {/* Current opportunity details */}
+                  {(() => {
+                    const detail = migrationPreview.opportunityDetails[previewIndex]
+                    const opp = detail.opportunity
+                    return (
+                      <div className="space-y-3 bg-background rounded-md p-3">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h5 className="font-semibold">{opp.opportunity_title}</h5>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {opp.stage?.name} → {detail.targetStageName}
+                            </p>
+                          </div>
+                          <Badge 
+                            className={`${
+                              detail.targetStatus === "WON" ? "bg-green-500" :
+                              detail.targetStatus === "LOST" ? "bg-red-500" :
+                              "bg-blue-500"
+                            }`}
+                          >
+                            {detail.targetStatus}
+                          </Badge>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-3 text-xs">
+                          {/* Value */}
+                          <div className="flex items-center gap-2">
+                            <DollarSign className="w-3 h-3 text-green-600" />
+                            <span className="text-muted-foreground">Value:</span>
+                            <span className="font-medium">
+                              {detail.value > 0 ? `${detail.value.toLocaleString()} ${currency}` : "—"}
+                            </span>
+                          </div>
+                          
+                          {/* Contact */}
+                          {opp.contact && (
+                            <div className="flex items-center gap-2">
+                              <User className="w-3 h-3 text-blue-600" />
+                              <span className="text-muted-foreground">Contact:</span>
+                              <span className="font-medium truncate">
+                                {opp.contact.first_name} {opp.contact.last_name}
+                              </span>
+                            </div>
+                          )}
+                          
+                          {/* Owner */}
+                          {opp.user && (
+                            <div className="flex items-center gap-2">
+                              <User className="w-3 h-3 text-purple-600" />
+                              <span className="text-muted-foreground">Owner:</span>
+                              <span className="font-medium">
+                                {opp.user.first_name} {opp.user.last_name}
+                              </span>
+                            </div>
+                          )}
+                          
+                          {/* Est. Close */}
+                          {opp.estimated_close_date && (
+                            <div className="flex items-center gap-2">
+                              <Calendar className="w-3 h-3 text-orange-600" />
+                              <span className="text-muted-foreground">Est. Close:</span>
+                              <span className="font-medium">
+                                {new Date(opp.estimated_close_date).toLocaleDateString()}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* Notes indicator */}
+                        {detail.hasNotes && (
+                          <div className="flex items-center gap-2 text-xs pt-2 border-t">
+                            <FileText className="w-3 h-3 text-muted-foreground" />
+                            <span className="text-muted-foreground">
+                              {detail.noteCount} note{detail.noteCount > 1 ? "s" : ""} will be created
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
               
               {/* Summary */}
               <div className="flex items-center justify-between py-2 border-t">
@@ -925,7 +1302,7 @@ export function MigrationDashboard() {
                   </Alert>
                   
                   {/* List of skipped */}
-                  <div className="max-h-32 overflow-auto text-xs border rounded p-2 bg-amber-50/50 space-y-1">
+                  <div className="max-h-24 overflow-auto text-xs border rounded p-2 bg-amber-50/50 space-y-1">
                     {migrationPreview.skippedOpps.slice(0, 10).map((opp, idx) => (
                       <div key={idx} className="flex items-center gap-2 text-amber-800">
                         <span>•</span>
