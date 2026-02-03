@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -13,8 +13,16 @@ import {
   ChevronDown, 
   ChevronRight,
   Loader2,
+  MoreVertical,
   Sparkles
 } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { StageSelector, StageOption } from "./stage-selector"
 
 export interface PipelineSuggestion {
   name: string
@@ -27,14 +35,20 @@ interface PipelineBuilderProps {
   suggestions: PipelineSuggestion[]
   onSuggestionsChange: (suggestions: PipelineSuggestion[]) => void
   onCreatePipelines: (pipelines: PipelineSuggestion[]) => void
+  onAnalyzeWithAI?: () => void
   isCreating: boolean
+  isAnalyzing?: boolean
+  availableStages: StageOption[]
 }
 
 export function PipelineBuilder({ 
   suggestions, 
   onSuggestionsChange, 
   onCreatePipelines,
-  isCreating 
+  onAnalyzeWithAI,
+  isCreating,
+  isAnalyzing,
+  availableStages
 }: PipelineBuilderProps) {
   const [expandedPipelines, setExpandedPipelines] = useState<Set<number>>(new Set([0]))
 
@@ -64,7 +78,7 @@ export function PipelineBuilder({
 
   const addStage = (pipelineIndex: number) => {
     const newSuggestions = [...suggestions]
-    newSuggestions[pipelineIndex].stages.push(`New Stage ${newSuggestions[pipelineIndex].stages.length + 1}`)
+    newSuggestions[pipelineIndex].stages.push("")
     onSuggestionsChange(newSuggestions)
   }
 
@@ -77,7 +91,7 @@ export function PipelineBuilder({
   const addPipeline = () => {
     const newPipeline: PipelineSuggestion = {
       name: `New Pipeline ${suggestions.length + 1}`,
-      stages: ["Stage 1", "Stage 2", "Stage 3"],
+      stages: [""],
       description: "Custom pipeline",
       matchingOpportunities: []
     }
@@ -92,6 +106,7 @@ export function PipelineBuilder({
 
   return (
     <div className="space-y-4">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold">Pipeline Structure</h3>
@@ -99,120 +114,135 @@ export function PipelineBuilder({
             Edit the suggested structure before creating
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={addPipeline}>
-          <Plus className="w-4 h-4 mr-1" />
-          Add Pipeline
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={addPipeline}>
+            <Plus className="w-4 h-4 mr-1" />
+            Add Pipeline
+          </Button>
+          
+          {/* Subtle AI option in dropdown */}
+          {onAnalyzeWithAI && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <MoreVertical className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem 
+                  onClick={onAnalyzeWithAI}
+                  disabled={isAnalyzing}
+                >
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  {isAnalyzing ? "Analyzing..." : "Analyze with AI"}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
       </div>
 
-      {suggestions.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="py-8 text-center text-muted-foreground">
-            <Sparkles className="w-8 h-8 mx-auto mb-2 opacity-50" />
-            <p>Click "Analyze with AI" to get pipeline suggestions</p>
-            <p className="text-sm">or add pipelines manually</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-3">
-          {suggestions.map((pipeline, pIndex) => (
-            <Card key={pIndex} className="overflow-hidden">
-              <div 
-                className="flex items-center gap-2 p-3 bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors"
-                onClick={() => toggleExpanded(pIndex)}
-              >
-                {expandedPipelines.has(pIndex) ? (
-                  <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                ) : (
-                  <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                )}
-                
-                {/* Always show editable input for pipeline name */}
-                <Input
-                  value={pipeline.name}
-                  onChange={(e) => updatePipelineName(pIndex, e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
-                  className="h-8 w-48 font-medium"
-                  placeholder="Pipeline name..."
-                />
-                
-                <Badge variant="secondary" className="flex-shrink-0">
-                  {pipeline.stages.length} stages
+      {/* Pipeline cards */}
+      <div className="space-y-3">
+        {suggestions.map((pipeline, pIndex) => (
+          <Card key={pIndex} className="overflow-hidden">
+            <div 
+              className="flex items-center gap-2 p-3 bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors"
+              onClick={() => toggleExpanded(pIndex)}
+            >
+              {expandedPipelines.has(pIndex) ? (
+                <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+              )}
+              
+              {/* Pipeline name input */}
+              <Input
+                value={pipeline.name}
+                onChange={(e) => updatePipelineName(pIndex, e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                className="h-8 w-48 font-medium"
+                placeholder="Pipeline name..."
+              />
+              
+              <Badge variant="secondary" className="flex-shrink-0">
+                {pipeline.stages.filter(s => s.trim()).length} stages
+              </Badge>
+              
+              {pipeline.matchingOpportunities.length > 0 && (
+                <Badge variant="outline" className="flex-shrink-0">
+                  {pipeline.matchingOpportunities.length} opportunities
                 </Badge>
+              )}
+              
+              <div className="ml-auto flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-7 w-7 text-destructive hover:text-destructive"
+                  onClick={() => removePipeline(pIndex)}
+                >
+                  <Trash2 className="w-3 h-3" />
+                </Button>
+              </div>
+            </div>
+            
+            {expandedPipelines.has(pIndex) && (
+              <CardContent className="pt-3">
+                <p className="text-xs text-muted-foreground mb-3">
+                  Edit the stage names below, or use the defaults. All pipelines will be created in your Keap account.
+                </p>
                 
-                {pipeline.matchingOpportunities.length > 0 && (
-                  <Badge variant="outline" className="flex-shrink-0">
-                    {pipeline.matchingOpportunities.length} opportunities
-                  </Badge>
-                )}
-                
-                <div className="ml-auto flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                <div className="space-y-2">
+                  {pipeline.stages.map((stage, sIndex) => (
+                    <div 
+                      key={sIndex} 
+                      className="flex items-center gap-2 p-2 rounded-md bg-muted/20 group"
+                    >
+                      <GripVertical className="w-4 h-4 text-muted-foreground/50 flex-shrink-0 cursor-grab" />
+                      <div className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-medium flex-shrink-0">
+                        {sIndex + 1}
+                      </div>
+                      
+                      {/* Stage selector with search & create */}
+                      <StageSelector
+                        value={stage}
+                        onChange={(value) => updateStageName(pIndex, sIndex, value)}
+                        availableStages={availableStages}
+                        placeholder="Select or type stage name..."
+                        className="flex-1"
+                      />
+                      
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive flex-shrink-0"
+                        onClick={() => removeStage(pIndex, sIndex)}
+                        disabled={pipeline.stages.length <= 1}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  ))}
+                  
                   <Button 
                     variant="ghost" 
-                    size="icon" 
-                    className="h-7 w-7 text-destructive hover:text-destructive"
-                    onClick={() => removePipeline(pIndex)}
+                    size="sm" 
+                    className="w-full mt-2 border-dashed border"
+                    onClick={() => addStage(pIndex)}
                   >
-                    <Trash2 className="w-3 h-3" />
+                    <Plus className="w-4 h-4 mr-1" />
+                    Add Stage
                   </Button>
                 </div>
-              </div>
-              
-              {expandedPipelines.has(pIndex) && (
-                <CardContent className="pt-3">
-                  <p className="text-xs text-muted-foreground mb-3">
-                    Edit the stage names below, or use the defaults. All pipelines will be created in your Keap account.
-                  </p>
-                  
-                  <div className="space-y-2">
-                    {pipeline.stages.map((stage, sIndex) => (
-                      <div 
-                        key={sIndex} 
-                        className="flex items-center gap-2 p-2 rounded-md bg-muted/20 group"
-                      >
-                        <GripVertical className="w-4 h-4 text-muted-foreground/50 flex-shrink-0 cursor-grab" />
-                        <div className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-medium flex-shrink-0">
-                          {sIndex + 1}
-                        </div>
-                        
-                        {/* Always show editable input for stage name */}
-                        <Input
-                          value={stage}
-                          onChange={(e) => updateStageName(pIndex, sIndex, e.target.value)}
-                          className="h-7 flex-1"
-                          placeholder="Stage name..."
-                        />
-                        
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive flex-shrink-0"
-                          onClick={() => removeStage(pIndex, sIndex)}
-                          disabled={pipeline.stages.length <= 1}
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </Button>
-                      </div>
-                    ))}
-                    
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="w-full mt-2 border-dashed border"
-                      onClick={() => addStage(pIndex)}
-                    >
-                      <Plus className="w-4 h-4 mr-1" />
-                      Add Stage
-                    </Button>
-                  </div>
-                </CardContent>
-              )}
-            </Card>
-          ))}
-        </div>
-      )}
+              </CardContent>
+            )}
+          </Card>
+        ))}
+      </div>
 
-      {suggestions.length > 0 && (
+      {/* Create button */}
+      {suggestions.length > 0 && suggestions.some(p => p.stages.some(s => s.trim())) && (
         <Button 
           className="w-full" 
           size="lg"

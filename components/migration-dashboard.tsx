@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge"
 import { OpportunitiesPanel, Opportunity } from "./opportunities-panel"
 import { PipelineBuilder, PipelineSuggestion } from "./pipeline-builder"
 import { FieldMapper, FieldMappingConfig } from "./field-mapper"
+import { StageOption } from "./stage-selector"
 import { useToast } from "@/hooks/use-toast"
 
 interface Pipeline {
@@ -58,7 +59,40 @@ export function MigrationDashboard() {
     data: any[]
   } | null>(null)
   
+  // Available stages extracted from opportunities
+  const [availableStages, setAvailableStages] = useState<StageOption[]>([])
+  const [defaultPipelineCreated, setDefaultPipelineCreated] = useState(false)
+  
   const { toast } = useToast()
+  
+  // Extract unique stages from opportunities and create default pipeline
+  const extractUniqueStages = (opps: Opportunity[]): StageOption[] => {
+    const stageMap = new Map<string, { order: number; count: number }>()
+    
+    opps.forEach(opp => {
+      if (opp.stage?.name) {
+        const existing = stageMap.get(opp.stage.name)
+        const order = opp.stage.details?.stage_order ?? 999
+        if (existing) {
+          existing.count++
+          // Keep the lowest order
+          if (order < existing.order) {
+            existing.order = order
+          }
+        } else {
+          stageMap.set(opp.stage.name, { order, count: 1 })
+        }
+      }
+    })
+    
+    // Convert to array and sort by order, then alphabetically
+    return Array.from(stageMap.entries())
+      .map(([name, data]) => ({ name, order: data.order, count: data.count }))
+      .sort((a, b) => {
+        if (a.order !== b.order) return a.order - b.order
+        return a.name.localeCompare(b.name)
+      })
+  }
   
   const openJsonModal = (type: "opportunities" | "pipelines") => {
     if (type === "opportunities") {
@@ -129,8 +163,25 @@ export function MigrationDashboard() {
         throw new Error(oppData.details || oppData.error || "Failed to fetch opportunities")
       }
 
-      setOpportunities(oppData.opportunities || [])
+      const opps = oppData.opportunities || []
+      setOpportunities(opps)
       setPipelines(pipelineData.pipelines || [])
+      
+      // Extract unique stages for the stage selector
+      const stages = extractUniqueStages(opps)
+      setAvailableStages(stages)
+      
+      // Create default pipeline with all unique stages (only on first load)
+      if (!defaultPipelineCreated && stages.length > 0) {
+        const defaultPipeline: PipelineSuggestion = {
+          name: "New Pipeline 1",
+          stages: stages.map(s => s.name),
+          description: `Pipeline with ${stages.length} stages from your opportunities`,
+          matchingOpportunities: opps.map(o => o.id)
+        }
+        setSuggestions([defaultPipeline])
+        setDefaultPipelineCreated(true)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load data")
     } finally {
@@ -464,91 +515,73 @@ export function MigrationDashboard() {
         </Alert>
       )}
 
-      {/* Main Content */}
-      <div className="grid lg:grid-cols-2 gap-6">
-        {/* Left: Opportunities */}
-        <Card className="h-[700px] flex flex-col">
+      {/* Main Content - Full Width Tabs */}
+      <Card className="flex flex-col">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-1">
           <CardHeader className="flex-shrink-0 pb-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Source Opportunities</CardTitle>
-                <CardDescription>Select opportunities to analyze and migrate</CardDescription>
-              </div>
-              <Button variant="ghost" size="icon" onClick={loadData}>
-                <RefreshCw className="w-4 h-4" />
-              </Button>
-            </div>
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="build">Build Pipelines</TabsTrigger>
+              <TabsTrigger value="fields">Field Mapping</TabsTrigger>
+              <TabsTrigger value="migrate">Migrate Deals</TabsTrigger>
+            </TabsList>
           </CardHeader>
-          <CardContent className="flex-1 overflow-hidden px-4 pb-4">
-            <OpportunitiesPanel
-              opportunities={opportunities}
-              selectedIds={selectedOpportunities}
-              onSelectionChange={setSelectedOpportunities}
-              migratedIds={migratedOpportunities}
-            />
-          </CardContent>
-        </Card>
+          <CardContent className="flex-1 px-4 pb-4">
+            {/* Build Pipelines Tab - Full Width */}
+            <TabsContent value="build" className="mt-0">
+              <PipelineBuilder
+                suggestions={suggestions}
+                onSuggestionsChange={setSuggestions}
+                onCreatePipelines={createPipelines}
+                onAnalyzeWithAI={analyzeOpportunities}
+                isCreating={creating}
+                isAnalyzing={analyzing}
+                availableStages={availableStages}
+              />
+            </TabsContent>
 
-        {/* Right: Pipeline Builder / Migration */}
-        <Card className="flex flex-col" style={{ minHeight: '700px' }}>
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-1">
-            <CardHeader className="flex-shrink-0 pb-2">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="build">Build Pipelines</TabsTrigger>
-                <TabsTrigger value="fields">Field Mapping</TabsTrigger>
-                <TabsTrigger value="migrate">Migrate Deals</TabsTrigger>
-              </TabsList>
-            </CardHeader>
-            <CardContent className="flex-1 overflow-auto px-4 pb-4">
-              <TabsContent value="build" className="mt-0 flex-1 overflow-auto">
-                <div className="space-y-4 pr-2">
-                  {/* AI Analyze Button */}
-                  <Button 
-                    onClick={analyzeOpportunities}
-                    disabled={analyzing || opportunities.length === 0}
-                    className="w-full"
-                    variant={suggestions.length > 0 ? "outline" : "default"}
-                  >
-                    {analyzing ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Analyzing {opportunities.length} opportunities...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-4 h-4 mr-2" />
-                        {suggestions.length > 0 ? "Re-analyze with AI" : "Analyze with AI"}
-                      </>
-                    )}
-                  </Button>
+            {/* Field Mapping Tab */}
+            <TabsContent value="fields" className="mt-0">
+              <FieldMapper 
+                opportunities={opportunities} 
+                pipelines={pipelines}
+                savedConfig={fieldMappingConfig}
+                onConfigChange={setFieldMappingConfig}
+              />
+            </TabsContent>
 
-                  <PipelineBuilder
-                    suggestions={suggestions}
-                    onSuggestionsChange={setSuggestions}
-                    onCreatePipelines={createPipelines}
-                    isCreating={creating}
-                  />
+            {/* Migrate Deals Tab - Two Column Layout with Opportunities */}
+            <TabsContent value="migrate" className="mt-0">
+              <div className="grid lg:grid-cols-2 gap-6">
+                {/* Left: Opportunities Panel */}
+                <div className="h-[600px] flex flex-col border rounded-lg">
+                  <div className="p-4 border-b flex items-center justify-between">
+                    <div>
+                      <h3 className="font-semibold">Source Opportunities</h3>
+                      <p className="text-sm text-muted-foreground">Select opportunities to migrate</p>
+                    </div>
+                    <Button variant="ghost" size="icon" onClick={loadData}>
+                      <RefreshCw className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <div className="flex-1 overflow-hidden p-4">
+                    <OpportunitiesPanel
+                      opportunities={opportunities}
+                      selectedIds={selectedOpportunities}
+                      onSelectionChange={setSelectedOpportunities}
+                      migratedIds={migratedOpportunities}
+                    />
+                  </div>
                 </div>
-              </TabsContent>
 
-              <TabsContent value="fields" className="mt-0 flex-1 overflow-auto">
-                <FieldMapper 
-                  opportunities={opportunities} 
-                  pipelines={pipelines}
-                  savedConfig={fieldMappingConfig}
-                  onConfigChange={setFieldMappingConfig}
-                />
-              </TabsContent>
-
-              <TabsContent value="migrate" className="mt-0 flex-1 overflow-auto">
-                <div className="space-y-4 pr-2">
+                {/* Right: Migration Actions */}
+                <div className="space-y-4">
                   {pipelines.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
+                    <div className="text-center py-8 text-muted-foreground border rounded-lg">
                       <p>No pipelines available.</p>
                       <p className="text-sm">Create pipelines first in the "Build Pipelines" tab.</p>
                     </div>
                   ) : selectedOpportunities.size === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
+                    <div className="text-center py-8 text-muted-foreground border rounded-lg">
                       <p>Select opportunities to migrate.</p>
                       <p className="text-sm">Use the checkboxes on the left panel.</p>
                     </div>
@@ -627,11 +660,11 @@ export function MigrationDashboard() {
                     </>
                   )}
                 </div>
-              </TabsContent>
-            </CardContent>
-          </Tabs>
-        </Card>
-      </div>
+              </div>
+            </TabsContent>
+          </CardContent>
+        </Tabs>
+      </Card>
 
       {/* JSON Data Modal */}
       <Dialog open={jsonModalOpen} onOpenChange={setJsonModalOpen}>
