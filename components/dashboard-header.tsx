@@ -134,26 +134,20 @@ export function DashboardHeader({ onDataLoaded }: DashboardHeaderProps) {
     
     if (type === "xmlrpc") {
       const result = results.xmlrpc
+      const testData = result.tests ? {
+        ProductInterest: result.tests.productInterest,
+        StageMove: result.tests.stageMove,
+        duration_ms: result.duration,
+        status: result.message
+      } : { error: result.error }
+      
       setModalData({
-        title: "XML-RPC API Test",
+        title: "XML-RPC API",
         success: result.success,
         count: 0,
         total: 0,
         error: result.error,
-        data: result.tests ? [
-          { 
-            test: "ProductInterest Table", 
-            ...result.tests.productInterest 
-          },
-          { 
-            test: "StageMove Table", 
-            ...result.tests.stageMove 
-          },
-          {
-            duration: `${result.duration}ms`,
-            message: result.message
-          }
-        ] : undefined
+        data: [testData]
       })
       setModalOpen(true)
       return
@@ -219,10 +213,8 @@ export function DashboardHeader({ onDataLoaded }: DashboardHeaderProps) {
                   
                   {/* XML-RPC badge */}
                   <Badge 
-                    variant={results.xmlrpc.success ? "secondary" : "destructive"}
-                    className={`text-xs cursor-pointer hover:opacity-80 transition-opacity ${
-                      results.xmlrpc.success ? 'bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-900/30 dark:text-purple-300' : ''
-                    }`}
+                    variant={results.xmlrpc.success ? "default" : "destructive"}
+                    className="text-xs cursor-pointer hover:opacity-80 transition-opacity"
                     onClick={() => openModal("xmlrpc")}
                   >
                     {results.xmlrpc.success ? (
