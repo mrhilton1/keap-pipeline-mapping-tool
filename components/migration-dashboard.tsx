@@ -774,6 +774,17 @@ export function MigrationDashboard() {
             dealData.estimated_close_time = opp.estimated_close_date
           }
           
+          // Preserve original dates from opportunity (if mapped)
+          const dateCreatedMapping = fieldMappingConfig?.mappings?.find(m => m.sourceField === "date_created")
+          const lastUpdatedMapping = fieldMappingConfig?.mappings?.find(m => m.sourceField === "last_updated")
+          
+          if (dateCreatedMapping?.targetField === "created_time" && opp.date_created) {
+            dealData.created_time = opp.date_created
+          }
+          if (lastUpdatedMapping?.targetField === "last_updated_time" && opp.last_updated) {
+            dealData.last_updated_time = opp.last_updated
+          }
+          
           console.log("[Migration] Creating deal:", dealData.name, "status:", status)
           
           const response = await fetch("/api/deals", {

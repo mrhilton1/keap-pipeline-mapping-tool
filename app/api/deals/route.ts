@@ -33,6 +33,8 @@ interface DealRequestBody {
   value?: number
   currency?: string
   estimated_close_time?: string
+  created_time?: string         // Original creation date from opportunity
+  last_updated_time?: string    // Original last updated date from opportunity
   status?: "OPEN" | "WON" | "LOST"
   custom_fields?: Record<string, any>
   task_ids?: string[]
@@ -62,6 +64,8 @@ export async function POST(request: Request) {
       value, 
       currency = "USD", 
       estimated_close_time,
+      created_time,
+      last_updated_time,
       status = "OPEN",
       custom_fields,
       task_ids = [],
@@ -108,6 +112,14 @@ export async function POST(request: Request) {
     // Add estimated close time
     if (estimated_close_time) {
       dealRequest.estimated_close_time = estimated_close_time
+    }
+    
+    // Add original dates from opportunity (if API supports setting these)
+    if (created_time) {
+      dealRequest.created_time = created_time
+    }
+    if (last_updated_time) {
+      dealRequest.last_updated_time = last_updated_time
     }
     
     // Add custom fields

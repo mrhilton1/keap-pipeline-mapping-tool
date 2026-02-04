@@ -102,6 +102,8 @@ const STANDARD_DEAL_FIELDS: DealField[] = [
   { name: "contacts.id", label: "Primary Contact (1:1)", type: "REF", isCustom: false },
   { name: "owner_id", label: "Keap Original Owner", type: "REF", isCustom: false },
   { name: "estimated_close_time", label: "Estimated Close", type: "DATETIME", isCustom: false },
+  { name: "created_time", label: "Created Time", type: "DATETIME", isCustom: false },
+  { name: "last_updated_time", label: "Last Updated Time", type: "DATETIME", isCustom: false },
   { name: "status", label: "Status", type: "TEXT", isCustom: false },
 ]
 
@@ -120,6 +122,8 @@ const FIELD_DESCRIPTIONS: Record<string, string> = {
   "value.amount": "Numeric value only",
   "value.average": "Averages Low & High revenue (auto-links both fields)",
   "value.currency": "e.g., USD",
+  "created_time": "Preserve original creation date from opportunity",
+  "last_updated_time": "Preserve last updated date from opportunity",
   "_deal_notes": "Creates note via /v2/deals/{id}/notes API",
   "_stage_mapping": "Auto-match stages by name, map unmatched manually",
   "_owner_mapping": "⚠️ OVERRIDE: All deals assigned to ONE selected owner",
@@ -157,6 +161,8 @@ const DEFAULT_MAPPINGS: Record<string, string> = {
   "contact.id": "contacts.id",           // Contact ID → Primary Contact
   "user.id": "owner_id",                 // User ID → Keep Keap Original Owner (default)
   "estimated_close_date": "estimated_close_time",
+  "date_created": "created_time",        // Preserve original creation date
+  "last_updated": "last_updated_time",   // Preserve last updated date
   "stage.name": "_stage_mapping",         // Stage name → Smart Pipeline stage mapping
   "opportunity_notes": "_deal_notes",     // Notes → Deal notes API
   "next_action_notes": "_deal_notes",     // Next action notes → Deal notes API

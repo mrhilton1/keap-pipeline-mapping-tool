@@ -119,6 +119,8 @@ export interface CreateDealRequest {
   }
   contacts: Array<{ id: string; primary_contact: boolean }>  // Required
   estimated_close_time?: string
+  created_time?: string                   // Original creation date
+  last_updated_time?: string              // Original last updated date
   custom_fields?: Record<string, any>
 }
 
