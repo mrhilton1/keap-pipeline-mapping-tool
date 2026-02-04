@@ -38,6 +38,8 @@ const TESTS = [
   { id: 'producttable', name: 'Product Table (All)', description: 'All products with Id, Name, Price, Sku, Status' },
   { id: 'productoptvalue', name: 'ProductOptValue (All)', description: 'All product option values (variations, pricing)' },
   { id: 'productopt', name: 'ProductOpt (All)', description: 'Product options (option types/categories)' },
+  { id: 'orderitem', name: 'OrderItem (All)', description: 'All order line items with prices & quantities' },
+  { id: 'invoice', name: 'Invoice (All)', description: 'All invoices' },
   { id: 'stagemove', name: 'Stage Moves', description: 'Stage move history with names & analysis', needsOppId: true },
 ]
 

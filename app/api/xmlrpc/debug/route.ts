@@ -462,6 +462,48 @@ export async function GET(request: Request) {
         })
       }
 
+      case 'orderitem': {
+        // Get all OrderItem records - line items from orders/invoices
+        const result = await xmlRpcCall(
+          accessToken, 
+          'OrderItem', 
+          1000, 
+          { 'Id': '~>~0' },  // All records
+          ['Id', 'OrderId', 'ProductId', 'ItemName', 'ItemDescription', 'Qty', 'PricePerUnit', 'ItemType', 'Notes', 'CPU', 'PPU', 'DiscountPercent']
+        )
+        return NextResponse.json({
+          test: 'orderitem',
+          description: 'All Order Items (Line Items)',
+          success: result.success,
+          recordCount: result.data?.length || 0,
+          data: result.data,
+          error: result.error,
+          requestXml: result.requestXml,
+          responseXml: result.rawXml
+        })
+      }
+
+      case 'invoice': {
+        // Get all Invoice records
+        const result = await xmlRpcCall(
+          accessToken, 
+          'Invoice', 
+          1000, 
+          { 'Id': '~>~0' },  // All records
+          ['Id', 'ContactId', 'JobId', 'InvoiceTotal', 'TotalPaid', 'TotalDue', 'PayStatus', 'Description', 'ProductSold', 'DateCreated', 'RefundStatus']
+        )
+        return NextResponse.json({
+          test: 'invoice',
+          description: 'All Invoices',
+          success: result.success,
+          recordCount: result.data?.length || 0,
+          data: result.data,
+          error: result.error,
+          requestXml: result.requestXml,
+          responseXml: result.rawXml
+        })
+      }
+
       default:
         return NextResponse.json({ error: `Unknown test: ${test}` }, { status: 400 })
     }
