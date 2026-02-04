@@ -1107,6 +1107,7 @@ export function MigrationDashboard() {
                     isAnalyzing={analyzing}
                     availableStages={availableStages}
                     onStageCreated={handleStageCreated}
+                    existingPipelineNames={pipelines.map(p => p.name)}
                   />
                 </>
               )}
@@ -1126,8 +1127,8 @@ export function MigrationDashboard() {
             {/* Migrate Deals Tab - Two Column Layout with Opportunities */}
             <TabsContent value="migrate" className="mt-0">
               <div className="grid lg:grid-cols-2 gap-6">
-                {/* Left: Opportunities Panel */}
-                <div className="h-[calc(100vh-280px)] min-h-[600px] flex flex-col border rounded-lg">
+                {/* Left: Opportunities Panel - Tall to show more items */}
+                <div className="h-[calc(100vh-220px)] min-h-[750px] flex flex-col border rounded-lg">
                   <div className="p-4 border-b flex items-center justify-between">
                     <div>
                       <h3 className="font-semibold">Source Opportunities</h3>

@@ -41,6 +41,7 @@ interface PipelineBuilderProps {
   isAnalyzing?: boolean
   availableStages: StageOption[]
   onStageCreated?: (stageName: string) => void
+  existingPipelineNames?: string[]  // Names of pipelines that already exist
 }
 
 export function PipelineBuilder({ 
@@ -51,9 +52,21 @@ export function PipelineBuilder({
   isCreating,
   isAnalyzing,
   availableStages,
-  onStageCreated
+  onStageCreated,
+  existingPipelineNames = []
 }: PipelineBuilderProps) {
   const [expandedPipelines, setExpandedPipelines] = useState<Set<number>>(new Set([0]))
+  
+  // Check which pipelines already exist (case-insensitive)
+  const existingNamesLower = existingPipelineNames.map(n => n.toLowerCase())
+  const getPipelineExists = (name: string) => existingNamesLower.includes(name.toLowerCase().trim())
+  
+  // Count how many pipelines can be created (don't exist yet)
+  const creatablePipelines = suggestions.filter(p => 
+    p.name.trim() && 
+    p.stages.some(s => s.trim()) && 
+    !getPipelineExists(p.name)
+  )
   
   // Drag state
   const [dragState, setDragState] = useState<{
@@ -252,9 +265,16 @@ export function PipelineBuilder({
                 value={pipeline.name}
                 onChange={(e) => updatePipelineName(pIndex, e.target.value)}
                 onClick={(e) => e.stopPropagation()}
-                className="h-8 w-48 font-medium"
+                className={`h-8 w-48 font-medium ${getPipelineExists(pipeline.name) ? 'border-amber-400 bg-amber-50' : ''}`}
                 placeholder="Pipeline name..."
               />
+              
+              {/* Already exists warning */}
+              {getPipelineExists(pipeline.name) && (
+                <Badge variant="outline" className="text-[10px] bg-amber-100 text-amber-700 border-amber-300 flex-shrink-0">
+                  Already Exists
+                </Badge>
+              )}
               
               <Badge variant="secondary" className="flex-shrink-0">
                 {pipeline.stages.filter(s => s.trim()).length} stages
@@ -374,18 +394,28 @@ export function PipelineBuilder({
         <Button 
           className="w-full" 
           size="lg"
-          onClick={() => onCreatePipelines(suggestions)}
-          disabled={isCreating}
+          onClick={() => onCreatePipelines(creatablePipelines)}
+          disabled={isCreating || creatablePipelines.length === 0}
         >
           {isCreating ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
               Creating Pipelines...
             </>
+          ) : creatablePipelines.length === 0 ? (
+            <>
+              <Check className="w-4 h-4 mr-2" />
+              All Pipelines Already Exist
+            </>
           ) : (
             <>
               <Check className="w-4 h-4 mr-2" />
-              Create {suggestions.length} Pipeline{suggestions.length > 1 ? 's' : ''}
+              Create {creatablePipelines.length} Pipeline{creatablePipelines.length > 1 ? 's' : ''}
+              {creatablePipelines.length < suggestions.length && (
+                <span className="text-xs opacity-70 ml-1">
+                  ({suggestions.length - creatablePipelines.length} already exist)
+                </span>
+              )}
             </>
           )}
         </Button>
