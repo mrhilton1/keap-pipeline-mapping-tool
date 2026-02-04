@@ -245,41 +245,6 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, initialPi
     }
   }, [mappings, stageMapping, ownerMapping, configLoaded, onConfigChange])
   
-  // Pre-select pipeline if passed from parent (Use Existing flow)
-  useEffect(() => {
-    if (initialPipeline && !stageMapping.pipelineId && opportunityStages.length > 0) {
-      // Auto-select the pipeline and compute smart stage mapping
-      const pipelineStages = initialPipeline.stages || []
-      
-      // Compute auto-matched stages
-      const perStageMappings = opportunityStages.map(oppStage => {
-        const matchedStage = pipelineStages.find(
-          ps => ps.name.toLowerCase() === oppStage.name.toLowerCase()
-        )
-        return {
-          opportunityStageName: oppStage.name,
-          opportunityCount: oppStage.count,
-          targetStageId: matchedStage?.id || null,
-          targetStageName: matchedStage?.name || null,
-          isAutoMatched: !!matchedStage
-        }
-      })
-      
-      console.log("[FieldMapper] Pre-selecting pipeline:", initialPipeline.name)
-      console.log("[FieldMapper] Computed perStageMappings:", perStageMappings)
-      
-      setStageMapping({
-        pipelineId: initialPipeline.id,
-        pipelineName: initialPipeline.name,
-        stageId: null,
-        stageName: null,
-        perStageMappings,
-        fallbackStageId: null,
-        fallbackStageName: null
-      })
-    }
-  }, [initialPipeline, opportunityStages])
-  
   // Create field dialog
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [createForSource, setCreateForSource] = useState<string | null>(null)
@@ -573,6 +538,41 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, initialPi
     })
     return Array.from(stageMap.values()).sort((a, b) => b.count - a.count)
   }, [opportunities])
+
+  // Pre-select pipeline if passed from parent (Use Existing flow)
+  useEffect(() => {
+    if (initialPipeline && !stageMapping.pipelineId && opportunityStages.length > 0) {
+      // Auto-select the pipeline and compute smart stage mapping
+      const pipelineStages = initialPipeline.stages || []
+      
+      // Compute auto-matched stages
+      const perStageMappings = opportunityStages.map(oppStage => {
+        const matchedStage = pipelineStages.find(
+          ps => ps.name.toLowerCase() === oppStage.name.toLowerCase()
+        )
+        return {
+          opportunityStageName: oppStage.name,
+          opportunityCount: oppStage.count,
+          targetStageId: matchedStage?.id || null,
+          targetStageName: matchedStage?.name || null,
+          isAutoMatched: !!matchedStage
+        }
+      })
+      
+      console.log("[FieldMapper] Pre-selecting pipeline:", initialPipeline.name)
+      console.log("[FieldMapper] Computed perStageMappings:", perStageMappings)
+      
+      setStageMapping({
+        pipelineId: initialPipeline.id,
+        pipelineName: initialPipeline.name,
+        stageId: null,
+        stageName: null,
+        perStageMappings,
+        fallbackStageId: null,
+        fallbackStageName: null
+      })
+    }
+  }, [initialPipeline, opportunityStages])
 
   // Compute auto-matched and unmatched stages when pipeline changes
   const computePerStageMappings = (pipelineStages: Stage[]): PerStageMapping[] => {
