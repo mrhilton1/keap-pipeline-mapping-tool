@@ -32,11 +32,16 @@ export interface OpportunityProduct {
   // Flat fields from enrichment
   ProductName?: string
   ProductPrice?: number
+  // Calculated price fields (when distributed from OrderRevenue)
+  CalculatedPrice?: number
+  OriginalPrice?: number
   // Nested product object from enrichment
   product?: {
     Id: number
     ProductName: string
     ProductPrice: number
+    CalculatedPrice?: number
+    OriginalPrice?: number
   }
 }
 
@@ -94,6 +99,8 @@ export interface Opportunity {
     outcomeDate: string | null
     outcome: 'WON' | 'LOST' | null
   } | null
+  // OrderRevenue from Lead table - used for WON deals
+  orderRevenue?: number
 }
 
 interface OpportunitiesPanelProps {
@@ -470,23 +477,54 @@ export function OpportunitiesPanel({
                                 <span className="font-medium">Products ({opp.products.length})</span>
                               </div>
                               <div className="space-y-1.5">
-                                {opp.products.map((pi: any, idx) => (
-                                  <div key={idx} className="flex items-center justify-between gap-2 text-xs">
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-medium text-blue-800">
-                                        {pi.ProductName || pi.product?.ProductName || `Product #${pi.ProductId}`}
+                                {opp.products.map((pi: any, idx) => {
+                                  const isCalculated = pi.CalculatedPrice !== undefined
+                                  const isUnknown = pi.ProductName === 'Unknown'
+                                  const displayPrice = pi.ProductPrice || pi.product?.ProductPrice || 0
+                                  
+                                  return (
+                                    <div key={idx} className={`flex items-center justify-between gap-2 text-xs ${isUnknown ? 'opacity-50' : ''}`}>
+                                      <div className="flex items-center gap-2">
+                                        <span className={`font-medium ${isUnknown ? 'text-gray-500 italic' : 'text-blue-800'}`}>
+                                          {pi.ProductName || pi.product?.ProductName || `Product #${pi.ProductId}`}
+                                        </span>
+                                        {pi.Qty > 1 && (
+                                          <Badge variant="outline" className="text-[10px] bg-blue-100">
+                                            x{pi.Qty}
+                                          </Badge>
+                                        )}
+                                        {isCalculated && !isUnknown && (
+                                          <Badge className="text-[9px] h-3.5 bg-green-500 text-white">
+                                            calculated
+                                          </Badge>
+                                        )}
+                                      </div>
+                                      <span className={`font-medium ${isCalculated && !isUnknown ? 'text-green-600' : 'text-blue-600'}`}>
+                                        ${displayPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                       </span>
-                                      {pi.Qty > 1 && (
-                                        <Badge variant="outline" className="text-[10px] bg-blue-100">
-                                          x{pi.Qty}
-                                        </Badge>
-                                      )}
                                     </div>
-                                    <span className="text-blue-600 font-medium">
-                                      ${(pi.ProductPrice || pi.product?.ProductPrice || 0).toLocaleString()}
-                                    </span>
-                                  </div>
-                                ))}
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Order Revenue (from XML-RPC Lead table) */}
+                          {opp.orderRevenue && opp.orderRevenue > 0 && (
+                            <div className="mt-2 p-2 rounded border bg-emerald-50 border-emerald-200">
+                              <div className="flex items-center justify-between text-xs">
+                                <div className="flex items-center gap-1.5 text-emerald-700">
+                                  <DollarSign className="w-3 h-3" />
+                                  <span className="font-medium">Order Revenue</span>
+                                  {opp.stageMoves?.outcome === 'WON' && (
+                                    <Badge className="text-[9px] h-3.5 bg-emerald-500 text-white ml-1">
+                                      used for deal value
+                                    </Badge>
+                                  )}
+                                </div>
+                                <span className="font-bold text-emerald-600">
+                                  ${opp.orderRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
                               </div>
                             </div>
                           )}

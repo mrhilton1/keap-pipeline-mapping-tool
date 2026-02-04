@@ -98,10 +98,31 @@ export async function POST(request: Request) {
       outcomeDate: string | null
       outcome: 'WON' | 'LOST' | null
     }> = {}
+    const orderRevenueData: Record<string, number> = {}
     
     // Step 3: Process each opportunity ID
     for (const oppId of opportunityIds) {
       const numericId = Number(oppId)
+      
+      // Query Lead table to get OrderRevenue for this opportunity
+      let orderRevenue = 0
+      try {
+        const leadResult = await client.query(
+          'Lead',
+          1,
+          0,
+          { Id: numericId },
+          ['Id', 'OrderRevenue']
+        )
+        const leadList = Array.isArray(leadResult) ? leadResult : []
+        if (leadList.length > 0 && leadList[0].OrderRevenue) {
+          orderRevenue = Number(leadList[0].OrderRevenue) || 0
+          orderRevenueData[String(numericId)] = orderRevenue
+          console.log(`[Enrich API] Opp #${numericId}: OrderRevenue = $${orderRevenue}`)
+        }
+      } catch (err) {
+        console.error(`[Enrich API] Lead/OrderRevenue error for Opp #${numericId}:`, err)
+      }
       
       // Query ProductInterest for this opportunity
       try {
@@ -115,7 +136,7 @@ export async function POST(request: Request) {
         const productList = Array.isArray(productResult) ? productResult : []
         if (productList.length > 0) {
           // Enrich with nested product object (matches UI expectations)
-          const enrichedProducts = productList.map(pi => {
+          let enrichedProducts = productList.map(pi => {
             const productDetails = productMap.get(pi.ProductId)
             return {
               ...pi,
@@ -130,6 +151,52 @@ export async function POST(request: Request) {
               } : null
             }
           })
+          
+          // Calculate prices based on OrderRevenue if available and > 0
+          if (orderRevenue > 0) {
+            // Get known products (exclude "Unknown" from calculation)
+            const knownProducts = enrichedProducts.filter(p => p.ProductName !== 'Unknown')
+            
+            // Sum non-$0 products (exclude Unknown from calculation)
+            const nonZeroSum = knownProducts
+              .filter(p => p.ProductPrice > 0)
+              .reduce((sum, p) => sum + (p.ProductPrice * (p.Qty || 1)), 0)
+            
+            // Find $0 products that are NOT Unknown
+            const zeroProducts = knownProducts.filter(p => p.ProductPrice === 0)
+            const zeroCount = zeroProducts.length
+            
+            // Calculate remainder to distribute
+            const remainder = orderRevenue - nonZeroSum
+            
+            console.log(`[Enrich API] Opp #${numericId}: OrderRevenue=$${orderRevenue}, NonZeroSum=$${nonZeroSum}, Remainder=$${remainder}, ZeroProducts=${zeroCount}`)
+            
+            if (remainder > 0 && zeroCount > 0) {
+              const distributedPrice = remainder / zeroCount
+              
+              // Update $0 products with calculated price (but NOT Unknown products)
+              enrichedProducts = enrichedProducts.map(p => {
+                if (p.ProductPrice === 0 && p.ProductName !== 'Unknown') {
+                  return {
+                    ...p,
+                    ProductPrice: distributedPrice,
+                    CalculatedPrice: distributedPrice,  // Flag as calculated
+                    OriginalPrice: 0,  // Keep original for reference
+                    product: p.product ? {
+                      ...p.product,
+                      ProductPrice: distributedPrice,
+                      CalculatedPrice: distributedPrice,
+                      OriginalPrice: 0
+                    } : null
+                  }
+                }
+                return p
+              })
+              
+              console.log(`[Enrich API] Opp #${numericId}: Distributed $${distributedPrice.toFixed(2)} to ${zeroCount} zero-price products`)
+            }
+          }
+          
           products[String(numericId)] = enrichedProducts
           console.log(`[Enrich API] Opp #${numericId}: ${productList.length} products`)
         }
@@ -197,17 +264,20 @@ export async function POST(request: Request) {
 
     const productsCount = Object.keys(products).length
     const stageMovesCount = Object.keys(stageMoveData).length
+    const orderRevenueCount = Object.keys(orderRevenueData).length
     
-    console.log(`[Enrich API] Complete! Products for ${productsCount} opps, StageMoves for ${stageMovesCount} opps`)
+    console.log(`[Enrich API] Complete! Products for ${productsCount} opps, StageMoves for ${stageMovesCount} opps, OrderRevenue for ${orderRevenueCount} opps`)
 
     return NextResponse.json({ 
       products,
       stageMoves: stageMoveData,  // Now includes analysis (lastUpdated, outcomeDate, outcome)
+      orderRevenue: orderRevenueData,  // OrderRevenue per opportunity for WON deals
       stages: Object.fromEntries(stageMap),
       summary: {
         requested: opportunityIds.length,
         withProducts: productsCount,
         withStageMoves: stageMovesCount,
+        withOrderRevenue: orderRevenueCount,
         totalStages: stageMap.size,
         totalProducts: productMap.size
       }

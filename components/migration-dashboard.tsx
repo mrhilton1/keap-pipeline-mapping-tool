@@ -261,13 +261,16 @@ export function MigrationDashboard() {
                 ...opp,
                 products: enrichData.products?.[oppId] || [],
                 // stageMoves now includes analysis: { moves, lastUpdated, outcomeDate, outcome }
-                stageMoves: stageData || null
+                stageMoves: stageData || null,
+                // OrderRevenue from Lead table for WON deals
+                orderRevenue: enrichData.orderRevenue?.[oppId] || undefined
               }
             })
             
             const productsCount = Object.values(enrichData.products || {}).filter((p: any) => p?.length > 0).length
             const stageMovesCount = Object.values(enrichData.stageMoves || {}).filter((m: any) => m?.moves?.length > 0).length
-            console.log(`[Dashboard] Enriched: ${productsCount} with products, ${stageMovesCount} with stage moves`)
+            const orderRevenueCount = Object.keys(enrichData.orderRevenue || {}).length
+            console.log(`[Dashboard] Enriched: ${productsCount} with products, ${stageMovesCount} with stage moves, ${orderRevenueCount} with orderRevenue`)
           } else {
             console.warn("[Dashboard] XML-RPC enrichment failed:", await enrichRes.text())
           }
@@ -772,8 +775,10 @@ export function MigrationDashboard() {
           }
           
           // Add value - check if using average or single amount
+          // For WON deals, use OrderRevenue from Lead table if available
           const revenueHigh = opp.projected_revenue_high || 0
           const revenueLow = opp.projected_revenue_low || 0
+          const orderRevenue = (opp as any).orderRevenue || 0  // From XML-RPC Lead table
           const useAverage = fieldMappingConfig?.mappings?.some(
             m => m.sourceField === "projected_revenue_high" && m.targetField === "value.average"
           ) || fieldMappingConfig?.mappings?.some(
@@ -781,7 +786,12 @@ export function MigrationDashboard() {
           )
           
           let finalValue = 0
-          if (revenueHigh > 0 || revenueLow > 0) {
+          
+          // For WON deals, use OrderRevenue if available
+          if (status === "WON" && orderRevenue > 0) {
+            finalValue = orderRevenue
+            console.log(`[Migration] Value (WON - OrderRevenue): $${finalValue}`)
+          } else if (revenueHigh > 0 || revenueLow > 0) {
             if (useAverage && revenueHigh > 0 && revenueLow > 0) {
               // Both values exist - use average
               finalValue = Math.round((revenueHigh + revenueLow) / 2)
