@@ -39,17 +39,15 @@ export async function GET() {
 
     const client = new KeapXmlRpcClient(accessToken)
 
-    // Test 1: ProductInterest - use findByField with known Opportunity ID 2
-    // ObjectId links to Opportunity Id
-    console.log('[XML-RPC Test] Testing ProductInterest.findByField(ObjectId=2)...')
+    // Test 1: ProductInterest - use query with ObjectId=2 (MATCHES WORKING CURL)
+    console.log('[XML-RPC Test] Testing ProductInterest.query(ObjectId=2)...')
     try {
-      const result = await client.findByField(
+      const result = await client.query(
         'ProductInterest',
         100,
         0,
-        'ObjectId',  // Field to search
-        2,           // Known Opportunity ID
-        ['Id', 'ObjectId', 'ProductId', 'Qty', 'DiscountPercent']
+        { ObjectId: 2 },  // Exact same as working curl
+        ['Id', 'ObjectId', 'ProductId', 'Qty']
       )
       const productInterests = Array.isArray(result) ? result : []
       results.productInterest = {
@@ -58,19 +56,20 @@ export async function GET() {
         count: productInterests.length,
         sample: productInterests[0] || null
       }
+      console.log(`[XML-RPC Test] ProductInterest result:`, JSON.stringify(result).substring(0, 500))
     } catch (err: any) {
+      console.error('[XML-RPC Test] ProductInterest error:', err)
       results.productInterest = { success: false, error: err.message || String(err), count: 0 }
     }
 
-    // Test 2: StageMove - use findByField with known Opportunity ID 2
-    console.log('[XML-RPC Test] Testing StageMove.findByField(OpportunityId=2)...')
+    // Test 2: StageMove - use query with OpportunityId=2
+    console.log('[XML-RPC Test] Testing StageMove.query(OpportunityId=2)...')
     try {
-      const result = await client.findByField(
+      const result = await client.query(
         'StageMove',
         100,
         0,
-        'OpportunityId',  // Field to search
-        2,                // Known Opportunity ID
+        { OpportunityId: 2 },
         ['Id', 'OpportunityId', 'MoveDate', 'MoveToStage', 'MoveFromStage']
       )
       const stageMoves = Array.isArray(result) ? result : []
@@ -80,7 +79,9 @@ export async function GET() {
         count: stageMoves.length,
         sample: stageMoves[0] || null
       }
+      console.log(`[XML-RPC Test] StageMove result:`, JSON.stringify(result).substring(0, 500))
     } catch (err: any) {
+      console.error('[XML-RPC Test] StageMove error:', err)
       results.stageMove = { success: false, error: err.message || String(err), count: 0 }
     }
 
