@@ -43,18 +43,20 @@ export async function GET() {
     // ObjectId links to Opportunity Id (not OpportunityId field!)
     console.log('[XML-RPC Test] Testing ProductInterest table...')
     try {
-      const productInterests = await client.query(
+      const result = await client.query(
         'ProductInterest',
         5,
         0,
         {},
         ['Id', 'ObjectId', 'ProductId', 'Qty', 'DiscountPercent']
       )
+      // Handle non-array responses (empty result may return {} not [])
+      const productInterests = Array.isArray(result) ? result : []
       results.productInterest = {
         success: true,
-        error: "",
-        count: Array.isArray(productInterests) ? productInterests.length : 0,
-        sample: Array.isArray(productInterests) ? productInterests[0] : productInterests
+        error: productInterests.length === 0 ? "No records (table may be empty)" : "",
+        count: productInterests.length,
+        sample: productInterests[0] || null
       }
     } catch (err: any) {
       results.productInterest = { success: false, error: err.message || String(err), count: 0 }
@@ -64,18 +66,20 @@ export async function GET() {
     // MoveToStage and MoveFromStage are IDs (not Stage name!)
     console.log('[XML-RPC Test] Testing StageMove table...')
     try {
-      const stageMoves = await client.query(
+      const result = await client.query(
         'StageMove',
         5,
         0,
         {},
         ['Id', 'OpportunityId', 'MoveDate', 'MoveToStage', 'MoveFromStage']
       )
+      // Handle non-array responses
+      const stageMoves = Array.isArray(result) ? result : []
       results.stageMove = {
         success: true,
-        error: "",
-        count: Array.isArray(stageMoves) ? stageMoves.length : 0,
-        sample: Array.isArray(stageMoves) ? stageMoves[0] : stageMoves
+        error: stageMoves.length === 0 ? "No records (table may be empty)" : "",
+        count: stageMoves.length,
+        sample: stageMoves[0] || null
       }
     } catch (err: any) {
       results.stageMove = { success: false, error: err.message || String(err), count: 0 }
@@ -84,18 +88,20 @@ export async function GET() {
     // Test 3: Product table
     console.log('[XML-RPC Test] Testing Product table...')
     try {
-      const products = await client.query(
+      const result = await client.query(
         'Product',
         5,
         0,
         {},
         ['Id', 'ProductName', 'ProductPrice', 'Sku', 'Status']
       )
+      // Handle non-array responses
+      const products = Array.isArray(result) ? result : []
       results.product = {
         success: true,
-        error: "",
-        count: Array.isArray(products) ? products.length : 0,
-        sample: Array.isArray(products) ? products[0] : products
+        error: products.length === 0 ? "No records (table may be empty)" : "",
+        count: products.length,
+        sample: products[0] || null
       }
     } catch (err: any) {
       results.product = { success: false, error: err.message || String(err), count: 0 }

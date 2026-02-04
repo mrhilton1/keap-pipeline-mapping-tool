@@ -206,13 +206,16 @@ export class KeapXmlRpcClient {
     
     // Fields from actual schema: Id, ObjectId, ProductId, Qty, DiscountPercent
     while (true) {
-      const batch = await this.query<ProductInterest>(
+      const result = await this.query<ProductInterest>(
         'ProductInterest',
         limit,
         page,
         {}, // No filter - get ALL
         ['Id', 'ObjectId', 'ProductId', 'Qty', 'DiscountPercent']
       )
+      
+      // Handle non-array responses (empty result returns {} not [])
+      const batch = Array.isArray(result) ? result : []
       
       if (batch.length === 0) break
       allInterests.push(...batch)
@@ -262,13 +265,16 @@ export class KeapXmlRpcClient {
     
     // Fields from actual schema: Id, OpportunityId, MoveDate, MoveToStage, MoveFromStage
     while (true) {
-      const batch = await this.query<StageMove>(
+      const result = await this.query<StageMove>(
         'StageMove',
         limit,
         page,
         {},
         ['Id', 'OpportunityId', 'MoveDate', 'MoveToStage', 'MoveFromStage', 'UserId']
       )
+      
+      // Handle non-array responses (empty result returns {} not [])
+      const batch = Array.isArray(result) ? result : []
       
       if (batch.length === 0) break
       allMoves.push(...batch)
