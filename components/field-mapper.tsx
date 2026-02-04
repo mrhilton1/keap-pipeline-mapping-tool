@@ -333,6 +333,19 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, initialPi
               count: (existing?.count || 0) + 1
             })
           }
+        } else if (key === 'stageMoves' && value && typeof value === 'object') {
+          // Handle stageMoves object specially - expose outcomeDate as mappable field
+          if (value.outcomeDate) {
+            const existing = fieldMap.get('stageMoves.outcomeDate')
+            fieldMap.set('stageMoves.outcomeDate', {
+              path: 'stageMoves.outcomeDate',
+              label: 'Stage Moves → Outcome Date',
+              type: 'TEXT',
+              sample: value.outcomeDate,
+              count: (existing?.count || 0) + 1
+            })
+          }
+          // Don't process other stageMoves fields (they're in HIDDEN_SOURCE_FIELDS)
         } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
           // Nested object
           processObject(value, `${prefix}${key}.`, `${labelPrefix}${formatLabel(key)} → `)
