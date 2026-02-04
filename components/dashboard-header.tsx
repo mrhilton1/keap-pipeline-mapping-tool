@@ -14,9 +14,21 @@ interface TestResult {
   data?: any[]
 }
 
+interface XmlRpcTestResult {
+  success: boolean
+  duration?: number
+  message?: string
+  error?: string
+  tests?: {
+    productInterest: { success: boolean; error: string; count: number }
+    stageMove: { success: boolean; error: string; count: number }
+  }
+}
+
 interface TestResults {
   opportunities: TestResult
   pipelines: TestResult
+  xmlrpc: XmlRpcTestResult
 }
 
 interface DashboardHeaderProps {
@@ -45,14 +57,16 @@ export function DashboardHeader({ onDataLoaded }: DashboardHeaderProps) {
     setTesting(true)
     
     try {
-      // Fetch opportunities (limit 20 for display, but get total count)
-      const [oppRes, pipeRes] = await Promise.all([
+      // Fetch opportunities, pipelines, and test XML-RPC
+      const [oppRes, pipeRes, xmlrpcRes] = await Promise.all([
         fetch("/api/opportunities?limit=20"),
-        fetch("/api/pipelines")
+        fetch("/api/pipelines"),
+        fetch("/api/xmlrpc/test")
       ])
       
       const oppData = await oppRes.json()
       const pipeData = await pipeRes.json()
+      const xmlrpcData = await xmlrpcRes.json()
       
       const opportunitiesResult: TestResult = {
         success: oppRes.ok,
@@ -70,9 +84,18 @@ export function DashboardHeader({ onDataLoaded }: DashboardHeaderProps) {
         data: pipeData.pipelines || []
       }
       
+      const xmlrpcResult: XmlRpcTestResult = {
+        success: xmlrpcRes.ok && xmlrpcData.success,
+        duration: xmlrpcData.duration,
+        message: xmlrpcData.message,
+        error: xmlrpcData.error,
+        tests: xmlrpcData.tests
+      }
+      
       setResults({
         opportunities: opportunitiesResult,
-        pipelines: pipelinesResult
+        pipelines: pipelinesResult,
+        xmlrpc: xmlrpcResult
       })
       
       // Notify parent of loaded data
@@ -95,6 +118,10 @@ export function DashboardHeader({ onDataLoaded }: DashboardHeaderProps) {
           error: err instanceof Error ? err.message : "Failed to fetch",
           count: 0,
           total: 0
+        },
+        xmlrpc: {
+          success: false,
+          error: err instanceof Error ? err.message : "Failed to fetch"
         }
       })
     } finally {
@@ -102,8 +129,35 @@ export function DashboardHeader({ onDataLoaded }: DashboardHeaderProps) {
     }
   }
 
-  const openModal = (type: "opportunities" | "pipelines") => {
+  const openModal = (type: "opportunities" | "pipelines" | "xmlrpc") => {
     if (!results) return
+    
+    if (type === "xmlrpc") {
+      const result = results.xmlrpc
+      setModalData({
+        title: "XML-RPC API Test",
+        success: result.success,
+        count: 0,
+        total: 0,
+        error: result.error,
+        data: result.tests ? [
+          { 
+            test: "ProductInterest Table", 
+            ...result.tests.productInterest 
+          },
+          { 
+            test: "StageMove Table", 
+            ...result.tests.stageMove 
+          },
+          {
+            duration: `${result.duration}ms`,
+            message: result.message
+          }
+        ] : undefined
+      })
+      setModalOpen(true)
+      return
+    }
     
     const result = results[type]
     setModalData({
@@ -160,6 +214,21 @@ export function DashboardHeader({ onDataLoaded }: DashboardHeaderProps) {
                       <>Pipelines: ✓{results.pipelines.total}</>
                     ) : (
                       <>Pipelines: ✗</>
+                    )}
+                  </Badge>
+                  
+                  {/* XML-RPC badge */}
+                  <Badge 
+                    variant={results.xmlrpc.success ? "secondary" : "destructive"}
+                    className={`text-xs cursor-pointer hover:opacity-80 transition-opacity ${
+                      results.xmlrpc.success ? 'bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-900/30 dark:text-purple-300' : ''
+                    }`}
+                    onClick={() => openModal("xmlrpc")}
+                  >
+                    {results.xmlrpc.success ? (
+                      <>XML-RPC: ✓</>
+                    ) : (
+                      <>XML-RPC: ✗</>
                     )}
                   </Badge>
                 </>
