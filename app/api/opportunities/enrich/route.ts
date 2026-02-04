@@ -216,30 +216,34 @@ export async function POST(request: Request) {
           })
           
           // Calculate prices based on OrderRevenue if available and > 0
+          // NOTE: OrderRevenue includes BOTH one-time and subscription revenue
+          // We should only use it to allocate one-time product prices
           if (orderRevenue > 0) {
-            // Get known products (exclude "Unknown" from calculation)
-            const knownProducts = enrichedProducts.filter(p => p.ProductName !== 'Unknown')
+            // Get known ONE-TIME products (exclude "Unknown" and subscriptions from calculation)
+            const oneTimeProducts = enrichedProducts.filter(p => 
+              p.ProductName !== 'Unknown' && !p.subscription?.isSubscription
+            )
             
-            // Sum non-$0 products (exclude Unknown from calculation)
-            const nonZeroSum = knownProducts
+            // Sum non-$0 one-time products (exclude Unknown and subscriptions)
+            const nonZeroSum = oneTimeProducts
               .filter(p => p.ProductPrice > 0)
               .reduce((sum, p) => sum + (p.ProductPrice * (p.Qty || 1)), 0)
             
-            // Find $0 products that are NOT Unknown
-            const zeroProducts = knownProducts.filter(p => p.ProductPrice === 0)
+            // Find $0 one-time products (NOT Unknown, NOT subscriptions)
+            const zeroProducts = oneTimeProducts.filter(p => p.ProductPrice === 0)
             const zeroCount = zeroProducts.length
             
-            // Calculate remainder to distribute
+            // Calculate remainder to distribute among one-time products
             const remainder = orderRevenue - nonZeroSum
             
-            console.log(`[Enrich API] Opp #${numericId}: OrderRevenue=$${orderRevenue}, NonZeroSum=$${nonZeroSum}, Remainder=$${remainder}, ZeroProducts=${zeroCount}`)
+            console.log(`[Enrich API] Opp #${numericId}: OrderRevenue=$${orderRevenue}, OneTimeSum=$${nonZeroSum}, Remainder=$${remainder}, ZeroOneTimeProducts=${zeroCount}`)
             
             if (remainder > 0 && zeroCount > 0) {
               const distributedPrice = remainder / zeroCount
               
-              // Update $0 products with calculated price (but NOT Unknown products)
+              // Update $0 one-time products with calculated price (NOT Unknown, NOT subscriptions)
               enrichedProducts = enrichedProducts.map(p => {
-                if (p.ProductPrice === 0 && p.ProductName !== 'Unknown') {
+                if (p.ProductPrice === 0 && p.ProductName !== 'Unknown' && !p.subscription?.isSubscription) {
                   return {
                     ...p,
                     ProductPrice: distributedPrice,
@@ -256,7 +260,7 @@ export async function POST(request: Request) {
                 return p
               })
               
-              console.log(`[Enrich API] Opp #${numericId}: Distributed $${distributedPrice.toFixed(2)} to ${zeroCount} zero-price products`)
+              console.log(`[Enrich API] Opp #${numericId}: Distributed $${distributedPrice.toFixed(2)} to ${zeroCount} zero-price one-time products`)
             }
           }
           
