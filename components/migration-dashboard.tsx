@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import React, { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -17,6 +17,7 @@ import {
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuPortal } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
 import { ChevronLeft, ChevronRight, User, DollarSign, FileText, Calendar, FolderOpen, Hammer, ArrowLeft } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -93,6 +94,7 @@ export function MigrationDashboard() {
   
   // Custom migration note (added FIRST to all deals)
   const [customMigrationNote, setCustomMigrationNote] = useState("")
+  const customNoteTextareaRef = React.useRef<HTMLTextAreaElement>(null)
   
   // Migration preview modal - enhanced with individual opportunity details
   const [previewModalOpen, setPreviewModalOpen] = useState(false)
@@ -1695,15 +1697,193 @@ export function MigrationDashboard() {
                   <h4 className="text-sm font-medium">Custom Migration Note (Optional)</h4>
                   <Badge variant="outline" className="text-[10px]">Added first to all deals</Badge>
                 </div>
-                <textarea
-                  value={customMigrationNote}
-                  onChange={(e) => setCustomMigrationNote(e.target.value)}
-                  placeholder="Enter a note to add to all migrated deals... Use merge fields: {opportunity_title}, {contact.first_name}, {contact.last_name}, {stage.name}, {user.first_name}"
-                  className="w-full min-h-[80px] p-2 text-xs border rounded bg-background resize-y"
-                />
-                <p className="text-[10px] text-muted-foreground">
-                  Available merge fields: <code>{'{opportunity_title}'}</code>, <code>{'{contact.first_name}'}</code>, <code>{'{contact.last_name}'}</code>, <code>{'{contact.email}'}</code>, <code>{'{stage.name}'}</code>, <code>{'{user.first_name}'}</code>, <code>{'{user.last_name}'}</code>
-                </p>
+                <div className="relative">
+                  <textarea
+                    ref={customNoteTextareaRef}
+                    value={customMigrationNote}
+                    onChange={(e) => setCustomMigrationNote(e.target.value)}
+                    placeholder="Enter a note to add to all migrated deals... Click 'Insert Merge Field' to add dynamic values"
+                    className="w-full min-h-[80px] p-2 text-xs border rounded bg-background resize-y"
+                  />
+                  <div className="mt-2 flex items-center gap-2">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm" className="h-7 text-xs">
+                          <span className="mr-1">+</span> Insert Merge Field
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="w-72 max-h-96 overflow-y-auto">
+                        <DropdownMenuLabel className="text-xs">Select a field to insert</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        
+                        {/* Opportunity Fields */}
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger className="text-xs">
+                            <FolderOpen className="w-3 h-3 mr-2" />
+                            Opportunity Fields
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuPortal>
+                            <DropdownMenuSubContent className="max-h-64 overflow-y-auto">
+                              {[
+                                { field: '{opportunity_title}', label: 'Title' },
+                                { field: '{id}', label: 'ID' },
+                                { field: '{date_created}', label: 'Date Created' },
+                                { field: '{last_updated}', label: 'Last Updated' },
+                                { field: '{estimated_close_date}', label: 'Estimated Close' },
+                                { field: '{projected_revenue_low}', label: 'Revenue (Low)' },
+                                { field: '{projected_revenue_high}', label: 'Revenue (High)' },
+                                { field: '{next_action_date}', label: 'Next Action Date' },
+                                { field: '{affiliate_id}', label: 'Affiliate ID' },
+                              ].map((item) => (
+                                <DropdownMenuItem
+                                  key={item.field}
+                                  className="text-xs"
+                                  onClick={() => {
+                                    const textarea = customNoteTextareaRef.current
+                                    if (textarea) {
+                                      const start = textarea.selectionStart
+                                      const end = textarea.selectionEnd
+                                      const newValue = customMigrationNote.substring(0, start) + item.field + customMigrationNote.substring(end)
+                                      setCustomMigrationNote(newValue)
+                                      setTimeout(() => {
+                                        textarea.focus()
+                                        textarea.setSelectionRange(start + item.field.length, start + item.field.length)
+                                      }, 0)
+                                    }
+                                  }}
+                                >
+                                  <code className="text-[10px] mr-2">{item.field}</code>
+                                  <span className="text-muted-foreground">{item.label}</span>
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuSubContent>
+                          </DropdownMenuPortal>
+                        </DropdownMenuSub>
+                        
+                        {/* Contact Fields */}
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger className="text-xs">
+                            <User className="w-3 h-3 mr-2" />
+                            Contact Fields
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuPortal>
+                            <DropdownMenuSubContent>
+                              {[
+                                { field: '{contact.first_name}', label: 'First Name' },
+                                { field: '{contact.last_name}', label: 'Last Name' },
+                                { field: '{contact.email}', label: 'Email' },
+                                { field: '{contact.company_name}', label: 'Company' },
+                                { field: '{contact.job_title}', label: 'Job Title' },
+                                { field: '{contact.phone_number}', label: 'Phone' },
+                                { field: '{contact.id}', label: 'Contact ID' },
+                              ].map((item) => (
+                                <DropdownMenuItem
+                                  key={item.field}
+                                  className="text-xs"
+                                  onClick={() => {
+                                    const textarea = customNoteTextareaRef.current
+                                    if (textarea) {
+                                      const start = textarea.selectionStart
+                                      const end = textarea.selectionEnd
+                                      const newValue = customMigrationNote.substring(0, start) + item.field + customMigrationNote.substring(end)
+                                      setCustomMigrationNote(newValue)
+                                      setTimeout(() => {
+                                        textarea.focus()
+                                        textarea.setSelectionRange(start + item.field.length, start + item.field.length)
+                                      }, 0)
+                                    }
+                                  }}
+                                >
+                                  <code className="text-[10px] mr-2">{item.field}</code>
+                                  <span className="text-muted-foreground">{item.label}</span>
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuSubContent>
+                          </DropdownMenuPortal>
+                        </DropdownMenuSub>
+                        
+                        {/* Stage Fields */}
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger className="text-xs">
+                            <Hammer className="w-3 h-3 mr-2" />
+                            Stage Fields
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuPortal>
+                            <DropdownMenuSubContent>
+                              {[
+                                { field: '{stage.name}', label: 'Stage Name' },
+                                { field: '{stage.id}', label: 'Stage ID' },
+                              ].map((item) => (
+                                <DropdownMenuItem
+                                  key={item.field}
+                                  className="text-xs"
+                                  onClick={() => {
+                                    const textarea = customNoteTextareaRef.current
+                                    if (textarea) {
+                                      const start = textarea.selectionStart
+                                      const end = textarea.selectionEnd
+                                      const newValue = customMigrationNote.substring(0, start) + item.field + customMigrationNote.substring(end)
+                                      setCustomMigrationNote(newValue)
+                                      setTimeout(() => {
+                                        textarea.focus()
+                                        textarea.setSelectionRange(start + item.field.length, start + item.field.length)
+                                      }, 0)
+                                    }
+                                  }}
+                                >
+                                  <code className="text-[10px] mr-2">{item.field}</code>
+                                  <span className="text-muted-foreground">{item.label}</span>
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuSubContent>
+                          </DropdownMenuPortal>
+                        </DropdownMenuSub>
+                        
+                        {/* User/Owner Fields */}
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger className="text-xs">
+                            <User className="w-3 h-3 mr-2" />
+                            Owner Fields
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuPortal>
+                            <DropdownMenuSubContent>
+                              {[
+                                { field: '{user.first_name}', label: 'First Name' },
+                                { field: '{user.last_name}', label: 'Last Name' },
+                                { field: '{user.id}', label: 'User ID' },
+                              ].map((item) => (
+                                <DropdownMenuItem
+                                  key={item.field}
+                                  className="text-xs"
+                                  onClick={() => {
+                                    const textarea = customNoteTextareaRef.current
+                                    if (textarea) {
+                                      const start = textarea.selectionStart
+                                      const end = textarea.selectionEnd
+                                      const newValue = customMigrationNote.substring(0, start) + item.field + customMigrationNote.substring(end)
+                                      setCustomMigrationNote(newValue)
+                                      setTimeout(() => {
+                                        textarea.focus()
+                                        textarea.setSelectionRange(start + item.field.length, start + item.field.length)
+                                      }, 0)
+                                    }
+                                  }}
+                                >
+                                  <code className="text-[10px] mr-2">{item.field}</code>
+                                  <span className="text-muted-foreground">{item.label}</span>
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuSubContent>
+                          </DropdownMenuPortal>
+                        </DropdownMenuSub>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    
+                    <p className="text-[10px] text-muted-foreground">
+                      Click a merge field to insert it at cursor position
+                    </p>
+                  </div>
+                </div>
               </div>
               
               {/* Action buttons */}
