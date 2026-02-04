@@ -362,10 +362,17 @@ export function MigrationDashboard() {
       // Refresh pipelines list
       await loadData()
       
-      // Move to migrate tab if opportunities are selected
-      if (selectedOpportunities.size > 0) {
-        setActiveTab("migrate")
+      // Reset pipeline mode so returning to Build tab shows the choice again
+      setPipelineMode(null)
+      
+      // Clear suggestions to prepare for next pipeline
+      setSuggestions([])
+      
+      // Auto-select the newly created pipeline and advance to Field Mapping
+      if (created.length === 1) {
+        setSelectedTargetPipeline(created[0])
       }
+      setActiveTab("fields")
     } else {
       const errorDetails = failed.length > 0 ? failed.join("; ") : "Unknown error"
       setError(`Failed to create pipelines: ${errorDetails}`)
@@ -991,7 +998,13 @@ export function MigrationDashboard() {
 
       {/* Main Content - Full Width Tabs */}
       <Card className="flex flex-col">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-1">
+        <Tabs value={activeTab} onValueChange={(tab) => {
+          // Reset pipeline mode when going back to build tab
+          if (tab === "build") {
+            setPipelineMode(null)
+          }
+          setActiveTab(tab)
+        }} className="flex flex-col flex-1">
           <CardHeader className="flex-shrink-0 pb-2">
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="build">Build Pipelines</TabsTrigger>
