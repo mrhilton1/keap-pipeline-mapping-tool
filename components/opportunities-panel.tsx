@@ -80,10 +80,14 @@ export interface Opportunity {
   }>
   // XML-RPC enrichment data
   products?: OpportunityProduct[]
-  outcomeDate?: {
-    date: string
-    outcome: 'WON' | 'LOST'
-  } | null
+  stageMoves?: Array<{
+    Id: number
+    OpportunityId: number
+    MoveDate: string
+    StageId: number
+    PrevStageId?: number
+    UserId?: number
+  }>
 }
 
 interface OpportunitiesPanelProps {
@@ -462,21 +466,26 @@ export function OpportunitiesPanel({
                             </div>
                           )}
                           
-                          {/* Outcome Date (from XML-RPC StageMove) */}
-                          {opp.outcomeDate && (
-                            <div className={`mt-2 p-2 rounded border ${
-                              opp.outcomeDate.outcome === 'WON' 
-                                ? 'bg-green-50 border-green-200' 
-                                : 'bg-red-50 border-red-200'
-                            }`}>
-                              <div className={`flex items-center gap-2 text-xs ${
-                                opp.outcomeDate.outcome === 'WON' ? 'text-green-700' : 'text-red-700'
-                              }`}>
+                          {/* Stage Moves (from XML-RPC StageMove table) */}
+                          {opp.stageMoves && opp.stageMoves.length > 0 && (
+                            <div className="mt-2 p-2 rounded border bg-purple-50 border-purple-200">
+                              <div className="flex items-center gap-2 text-xs text-purple-700">
                                 <Trophy className="w-3 h-3" />
                                 <span className="font-medium">
-                                  {opp.outcomeDate.outcome === 'WON' ? 'Won' : 'Lost'} on{' '}
-                                  {new Date(opp.outcomeDate.date).toLocaleDateString()}
+                                  {opp.stageMoves.length} stage move(s)
                                 </span>
+                              </div>
+                              <div className="mt-1 space-y-0.5">
+                                {opp.stageMoves.slice(-3).map((move, idx) => (
+                                  <div key={idx} className="text-[10px] text-purple-600">
+                                    Stage #{move.StageId} on {new Date(move.MoveDate).toLocaleDateString()}
+                                  </div>
+                                ))}
+                                {opp.stageMoves.length > 3 && (
+                                  <div className="text-[10px] text-purple-500 italic">
+                                    +{opp.stageMoves.length - 3} more...
+                                  </div>
+                                )}
                               </div>
                             </div>
                           )}

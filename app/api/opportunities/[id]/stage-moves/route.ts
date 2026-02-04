@@ -20,30 +20,22 @@ export async function GET(
     if (!accessToken?.value) {
       return NextResponse.json({ 
         error: "Not authenticated",
-        stageMoves: [],
-        outcomeDate: null
+        stageMoves: []
       }, { status: 401 })
     }
 
     const client = new KeapXmlRpcClient(accessToken.value)
     
-    // Get all stage moves and outcome date
-    const [stageMoves, outcomeDate] = await Promise.all([
-      client.getOpportunityStageMoves(opportunityId),
-      client.getOpportunityOutcomeDate(opportunityId)
-    ])
+    // Get all stage moves
+    const stageMoves = await client.getOpportunityStageMoves(opportunityId)
 
-    return NextResponse.json({ 
-      stageMoves,
-      outcomeDate
-    })
+    return NextResponse.json({ stageMoves })
   } catch (error) {
     console.error(`[Stage Moves API] Error for opportunity ${params.id}:`, error)
     return NextResponse.json({ 
       error: "Failed to fetch stage moves",
       details: error instanceof Error ? error.message : "Unknown error",
-      stageMoves: [],
-      outcomeDate: null
+      stageMoves: []
     })
   }
 }

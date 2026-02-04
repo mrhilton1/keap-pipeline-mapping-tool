@@ -131,7 +131,8 @@ function parseResponse(xml: string): any {
 
 export interface ProductInterest {
   Id: number
-  OpportunityId: number
+  ObjectId: number  // Links to opportunity or order
+  ObjType?: string  // 'Opportunity' or 'Order'
   ProductId: number
   Qty: number
   Price: number
@@ -153,8 +154,8 @@ export interface StageMove {
   Id: number
   OpportunityId: number
   MoveDate: string
-  Stage: string  // Stage name it moved TO
-  PreviousStage?: string
+  StageId: number  // Stage ID it moved TO
+  PrevStageId?: number
   UserId?: number
 }
 
@@ -223,18 +224,20 @@ export class KeapXmlRpcClient {
   }
 
   /**
-   * Get products linked to an opportunity via the Lead (ProductInterest) table
+   * Get products linked to an opportunity via the ProductInterest table
+   * Note: ProductInterest links to opportunities via ObjectId (when ObjType='Opportunity')
    */
   async getOpportunityProducts(opportunityId: number): Promise<Array<ProductInterest & { product?: Product }>> {
     console.log(`[XML-RPC] Getting products for opportunity ${opportunityId}`)
     
-    // Query Lead table for product interests
+    // Query ProductInterest table - links to opportunities via ObjectId
+    // ObjType can be 'Opportunity' or 'Order' - we want Opportunity
     const productInterests = await this.query<ProductInterest>(
-      'Lead',
+      'ProductInterest',
       100,
       0,
-      { OpportunityId: opportunityId },
-      ['Id', 'OpportunityId', 'ProductId', 'Qty', 'Price', 'Discount', 'Notes']
+      { ObjectId: opportunityId },
+      ['Id', 'ObjectId', 'ProductId', 'Qty', 'Price', 'Discount', 'Notes', 'ObjType']
     )
 
     if (productInterests.length === 0) {
@@ -282,25 +285,39 @@ export class KeapXmlRpcClient {
       100,
       0,
       { OpportunityId: opportunityId },
-      ['Id', 'OpportunityId', 'MoveDate', 'Stage', 'PreviousStage', 'UserId']
+      ['Id', 'OpportunityId', 'MoveDate', 'StageId', 'PrevStageId', 'UserId']
     )
   }
 
   /**
    * Get the WON or LOST date for an opportunity (if any)
+   * Note: Requires stage ID -> name mapping from the pipeline stages
+   * @param stageIdToName - Map of stage IDs to stage names (from REST API)
    */
-  async getOpportunityOutcomeDate(opportunityId: number): Promise<{ date: string; outcome: 'WON' | 'LOST' } | null> {
+  async getOpportunityOutcomeDate(
+    opportunityId: number, 
+    stageIdToName?: Map<number, string>
+  ): Promise<{ date: string; outcome: 'WON' | 'LOST'; stageId: number } | null> {
     const stageMoves = await this.getOpportunityStageMoves(opportunityId)
     
-    // Look for WON or LOST stage moves (case-insensitive)
+    // If no stage mapping provided, just return the most recent stage move with a potential outcome
+    // (We check if stageId is in a "won/lost" looking stage via the caller)
     for (const move of stageMoves) {
-      const stageName = move.Stage?.toUpperCase() || ''
-      if (stageName.includes('WON') || stageName.includes('CLOSED WON')) {
-        return { date: move.MoveDate, outcome: 'WON' }
+      if (stageIdToName && stageIdToName.has(move.StageId)) {
+        const stageName = stageIdToName.get(move.StageId)!.toUpperCase()
+        if (stageName.includes('WON') || stageName.includes('CLOSED WON')) {
+          return { date: move.MoveDate, outcome: 'WON', stageId: move.StageId }
+        }
+        if (stageName.includes('LOST') || stageName.includes('CLOSED LOST')) {
+          return { date: move.MoveDate, outcome: 'LOST', stageId: move.StageId }
+        }
       }
-      if (stageName.includes('LOST') || stageName.includes('CLOSED LOST')) {
-        return { date: move.MoveDate, outcome: 'LOST' }
-      }
+    }
+    
+    // Return latest stage move if we have them (caller can determine outcome)
+    if (stageMoves.length > 0) {
+      const latestMove = stageMoves[stageMoves.length - 1]
+      return { date: latestMove.MoveDate, outcome: 'WON', stageId: latestMove.StageId } // Caller should verify
     }
     
     return null
@@ -331,21 +348,22 @@ export class KeapXmlRpcClient {
   }
 
   /**
-   * Batch fetch outcome dates for multiple opportunities
+   * Batch fetch stage moves for multiple opportunities
+   * Returns raw stage moves - caller can map stage IDs to names
    */
-  async batchGetOutcomeDates(opportunityIds: number[]): Promise<Map<number, { date: string; outcome: 'WON' | 'LOST' } | null>> {
-    const results = new Map<number, { date: string; outcome: 'WON' | 'LOST' } | null>()
+  async batchGetStageMoves(opportunityIds: number[]): Promise<Map<number, StageMove[]>> {
+    const results = new Map<number, StageMove[]>()
     
     const batchSize = 10
     for (let i = 0; i < opportunityIds.length; i += batchSize) {
       const batch = opportunityIds.slice(i, i + batchSize)
       await Promise.all(batch.map(async (oppId) => {
         try {
-          const outcome = await this.getOpportunityOutcomeDate(oppId)
-          results.set(oppId, outcome)
+          const moves = await this.getOpportunityStageMoves(oppId)
+          results.set(oppId, moves)
         } catch (err) {
-          console.error(`[XML-RPC] Failed to get outcome for opportunity ${oppId}:`, err)
-          results.set(oppId, null)
+          console.error(`[XML-RPC] Failed to get stage moves for opportunity ${oppId}:`, err)
+          results.set(oppId, [])
         }
       }))
     }

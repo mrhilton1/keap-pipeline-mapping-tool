@@ -4,8 +4,8 @@ import { KeapXmlRpcClient } from "@/lib/keap-xmlrpc"
 
 /**
  * Batch endpoint to enrich opportunities with:
- * - Products (from Lead/ProductInterest table)
- * - Outcome dates (from StageMove table)
+ * - Products (from ProductInterest table)
+ * - Stage moves (from StageMove table) - for WON/LOST date tracking
  * 
  * POST body: { opportunityIds: number[] }
  */
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ 
         error: "Not authenticated",
         products: {},
-        outcomeDates: {}
+        stageMoves: {}
       }, { status: 401 })
     }
 
@@ -37,10 +37,10 @@ export async function POST(request: Request) {
     
     const client = new KeapXmlRpcClient(accessToken.value)
     
-    // Batch fetch products and outcome dates
-    const [productsMap, outcomeDatesMap] = await Promise.all([
+    // Batch fetch products and stage moves
+    const [productsMap, stageMovesMap] = await Promise.all([
       client.batchGetOpportunityProducts(opportunityIds.map(id => Number(id))),
-      client.batchGetOutcomeDates(opportunityIds.map(id => Number(id)))
+      client.batchGetStageMoves(opportunityIds.map(id => Number(id)))
     ])
 
     // Convert Maps to objects for JSON serialization
@@ -49,18 +49,18 @@ export async function POST(request: Request) {
       products[String(key)] = value
     })
 
-    const outcomeDates: Record<string, { date: string; outcome: 'WON' | 'LOST' } | null> = {}
-    outcomeDatesMap.forEach((value, key) => {
-      outcomeDates[String(key)] = value
+    const stageMoves: Record<string, any[]> = {}
+    stageMovesMap.forEach((value, key) => {
+      stageMoves[String(key)] = value
     })
 
     console.log(`[Enrich API] Enriched ${opportunityIds.length} opportunities`)
     console.log(`[Enrich API] Products found for ${Object.keys(products).filter(k => products[k].length > 0).length} opportunities`)
-    console.log(`[Enrich API] Outcome dates found for ${Object.keys(outcomeDates).filter(k => outcomeDates[k] !== null).length} opportunities`)
+    console.log(`[Enrich API] Stage moves found for ${Object.keys(stageMoves).filter(k => stageMoves[k].length > 0).length} opportunities`)
 
     return NextResponse.json({ 
       products,
-      outcomeDates
+      stageMoves
     })
   } catch (error) {
     console.error("[Enrich API] Error:", error)
@@ -68,7 +68,7 @@ export async function POST(request: Request) {
       error: "Failed to enrich opportunities",
       details: error instanceof Error ? error.message : "Unknown error",
       products: {},
-      outcomeDates: {}
+      stageMoves: {}
     }, { status: 500 })
   }
 }

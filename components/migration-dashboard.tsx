@@ -259,13 +259,13 @@ export function MigrationDashboard() {
               return {
                 ...opp,
                 products: enrichData.products?.[oppId] || [],
-                outcomeDate: enrichData.outcomeDates?.[oppId] || null
+                stageMoves: enrichData.stageMoves?.[oppId] || []
               }
             })
             
             const productsCount = Object.values(enrichData.products || {}).filter((p: any) => p?.length > 0).length
-            const outcomesCount = Object.values(enrichData.outcomeDates || {}).filter((d: any) => d !== null).length
-            console.log(`[Dashboard] Enriched: ${productsCount} with products, ${outcomesCount} with outcome dates`)
+            const stageMovesCount = Object.values(enrichData.stageMoves || {}).filter((m: any) => m?.length > 0).length
+            console.log(`[Dashboard] Enriched: ${productsCount} with products, ${stageMovesCount} with stage moves`)
           } else {
             console.warn("[Dashboard] XML-RPC enrichment failed:", await enrichRes.text())
           }
