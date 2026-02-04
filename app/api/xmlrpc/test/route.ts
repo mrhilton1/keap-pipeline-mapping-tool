@@ -3,7 +3,11 @@ import { NextResponse } from "next/server"
 import { KeapXmlRpcClient } from "@/lib/keap-xmlrpc"
 
 /**
- * Test XML-RPC connectivity and discover available fields
+ * Test XML-RPC connectivity with CORRECT field names from Keap schema:
+ * 
+ * ProductInterest: Id, ObjectId (=OpportunityId), ProductId, Qty, DiscountPercent
+ * StageMove: Id, OpportunityId, MoveDate, MoveToStage, MoveFromStage
+ * Product: Id, ProductName, ProductPrice
  */
 export async function GET() {
   const startTime = Date.now()
@@ -35,16 +39,16 @@ export async function GET() {
 
     const client = new KeapXmlRpcClient(accessToken)
 
-    // Test 1: ProductInterest - try to get ALL records (just IDs first)
+    // Test 1: ProductInterest with CORRECT fields
+    // ObjectId links to Opportunity Id (not OpportunityId field!)
     console.log('[XML-RPC Test] Testing ProductInterest table...')
     try {
-      // Try with OpportunityId first
       const productInterests = await client.query(
         'ProductInterest',
         5,
         0,
         {},
-        ['Id', 'ProductId', 'OpportunityId']
+        ['Id', 'ObjectId', 'ProductId', 'Qty', 'DiscountPercent']
       )
       results.productInterest = {
         success: true,
@@ -53,31 +57,11 @@ export async function GET() {
         sample: Array.isArray(productInterests) ? productInterests[0] : productInterests
       }
     } catch (err: any) {
-      // Try with ObjectId fallback
-      if (err.message?.includes('OpportunityId')) {
-        try {
-          const productInterests = await client.query(
-            'ProductInterest',
-            5,
-            0,
-            {},
-            ['Id', 'ProductId', 'ObjectId']
-          )
-          results.productInterest = {
-            success: true,
-            error: "Note: Using ObjectId instead of OpportunityId",
-            count: Array.isArray(productInterests) ? productInterests.length : 0,
-            sample: Array.isArray(productInterests) ? productInterests[0] : productInterests
-          }
-        } catch (err2: any) {
-          results.productInterest = { success: false, error: err2.message || String(err2), count: 0 }
-        }
-      } else {
-        results.productInterest = { success: false, error: err.message || String(err), count: 0 }
-      }
+      results.productInterest = { success: false, error: err.message || String(err), count: 0 }
     }
 
-    // Test 2: StageMove - try with Stage field first
+    // Test 2: StageMove with CORRECT fields
+    // MoveToStage and MoveFromStage are IDs (not Stage name!)
     console.log('[XML-RPC Test] Testing StageMove table...')
     try {
       const stageMoves = await client.query(
@@ -85,7 +69,7 @@ export async function GET() {
         5,
         0,
         {},
-        ['Id', 'OpportunityId', 'MoveDate', 'Stage']
+        ['Id', 'OpportunityId', 'MoveDate', 'MoveToStage', 'MoveFromStage']
       )
       results.stageMove = {
         success: true,
@@ -94,28 +78,7 @@ export async function GET() {
         sample: Array.isArray(stageMoves) ? stageMoves[0] : stageMoves
       }
     } catch (err: any) {
-      // Try without Stage field
-      if (err.message?.includes('Stage')) {
-        try {
-          const stageMoves = await client.query(
-            'StageMove',
-            5,
-            0,
-            {},
-            ['Id', 'OpportunityId', 'MoveDate']
-          )
-          results.stageMove = {
-            success: true,
-            error: "Note: Stage field not available",
-            count: Array.isArray(stageMoves) ? stageMoves.length : 0,
-            sample: Array.isArray(stageMoves) ? stageMoves[0] : stageMoves
-          }
-        } catch (err2: any) {
-          results.stageMove = { success: false, error: err2.message || String(err2), count: 0 }
-        }
-      } else {
-        results.stageMove = { success: false, error: err.message || String(err), count: 0 }
-      }
+      results.stageMove = { success: false, error: err.message || String(err), count: 0 }
     }
 
     // Test 3: Product table
@@ -126,7 +89,7 @@ export async function GET() {
         5,
         0,
         {},
-        ['Id', 'ProductName', 'ProductPrice']
+        ['Id', 'ProductName', 'ProductPrice', 'Sku', 'Status']
       )
       results.product = {
         success: true,
@@ -152,14 +115,16 @@ export async function GET() {
           success: results.productInterest.success, 
           error: results.productInterest.error, 
           count: results.productInterest.count,
-          sample: results.productInterest.sample
+          sample: results.productInterest.sample,
+          note: "ObjectId = Opportunity Id"
         },
         { 
           test: "StageMove Table", 
           success: results.stageMove.success, 
           error: results.stageMove.error, 
           count: results.stageMove.count,
-          sample: results.stageMove.sample
+          sample: results.stageMove.sample,
+          note: "MoveToStage/MoveFromStage are Stage IDs"
         },
         { 
           test: "Product Table", 

@@ -85,9 +85,12 @@ export interface Opportunity {
       Id: number
       OpportunityId: number
       MoveDate: string
-      Stage?: string
+      MoveToStage: number
+      MoveFromStage?: number
     }>
     lastUpdated: string | null
+    latestStageId: number | null
+    latestStageName: string | null
     outcomeDate: string | null
     outcome: 'WON' | 'LOST' | null
   }

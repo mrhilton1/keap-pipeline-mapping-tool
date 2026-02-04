@@ -3,12 +3,11 @@
  * 
  * Uses the same OAuth access token as REST API - no separate API key needed!
  * 
- * Used for accessing legacy tables not available in REST API:
- * - ProductInterest - links opportunities to products
- * - Product - product details (name, price)
- * - StageMove - stage transition history
+ * Table schemas from: https://developer.infusionsoft.com/docs/table-schema/
  * 
- * Documentation: https://developer.infusionsoft.com/docs/table-schema/
+ * ProductInterest - links opportunities to products via ObjectId
+ * Product - product details (ProductName, ProductPrice)
+ * StageMove - stage transition history (MoveToStage, MoveFromStage are IDs)
  */
 
 // XML-RPC method call builder
@@ -27,7 +26,6 @@ function buildMethodCall(method: string, params: any[]): string {
       return `<value><double>${value}</double></value>`
     }
     if (typeof value === 'string') {
-      // Escape XML special characters
       const escaped = value
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
@@ -59,7 +57,6 @@ function buildMethodCall(method: string, params: any[]): string {
 // Parse XML-RPC response
 function parseResponse(xml: string): any {
   const parseValue = (valueXml: string): any => {
-    // Check for different value types
     const stringMatch = valueXml.match(/<string>([^<]*)<\/string>/i)
     if (stringMatch) return stringMatch[1]
 
@@ -78,7 +75,6 @@ function parseResponse(xml: string): any {
     const nilMatch = valueXml.match(/<nil\s*\/?>/i)
     if (nilMatch) return null
 
-    // Array
     const arrayMatch = valueXml.match(/<array>\s*<data>([\s\S]*?)<\/data>\s*<\/array>/i)
     if (arrayMatch) {
       const values: any[] = []
@@ -90,7 +86,6 @@ function parseResponse(xml: string): any {
       return values
     }
 
-    // Struct
     const structMatch = valueXml.match(/<struct>([\s\S]*?)<\/struct>/i)
     if (structMatch) {
       const obj: Record<string, any> = {}
@@ -102,18 +97,15 @@ function parseResponse(xml: string): any {
       return obj
     }
 
-    // Default: return as string
     return valueXml.trim()
   }
 
-  // Check for fault
   const faultMatch = xml.match(/<fault>\s*<value>([\s\S]*?)<\/value>\s*<\/fault>/i)
   if (faultMatch) {
     const fault = parseValue(faultMatch[1])
     throw new Error(`XML-RPC Fault: ${fault.faultString || JSON.stringify(fault)}`)
   }
 
-  // Get params
   const paramMatch = xml.match(/<params>\s*<param>\s*<value>([\s\S]*?)<\/value>\s*<\/param>\s*<\/params>/i)
   if (paramMatch) {
     return parseValue(paramMatch[1])
@@ -122,24 +114,34 @@ function parseResponse(xml: string): any {
   throw new Error('Invalid XML-RPC response')
 }
 
-// Interfaces based on Keap table schema
+// Interfaces based on ACTUAL Keap table schema
 export interface ProductInterest {
   Id: number
-  OpportunityId?: number
-  ProductId: number
+  ObjectId: number      // Links to Opportunity Id
+  ObjType?: string      // 'Product' or 'CProgram'
+  ProductId: number     // Links to Product table
+  ProductType?: string
+  Qty?: number
+  DiscountPercent?: number
 }
 
 export interface Product {
   Id: number
   ProductName: string
-  ProductPrice?: number
+  ProductPrice: number
+  ShortDescription?: string
+  Sku?: string
+  Status?: number
 }
 
 export interface StageMove {
   Id: number
   OpportunityId: number
   MoveDate: string
-  Stage?: string  // Stage name (text field)
+  MoveToStage: number    // Stage ID moved TO
+  MoveFromStage?: number // Stage ID moved FROM
+  UserId?: number
+  DateCreated?: string
 }
 
 export class KeapXmlRpcClient {
@@ -152,7 +154,6 @@ export class KeapXmlRpcClient {
   }
 
   private async call(method: string, params: any[]): Promise<any> {
-    // With OAuth, first param is empty string, token goes in header
     const fullParams = ['', ...params]
     const body = buildMethodCall(method, fullParams)
 
@@ -182,9 +183,6 @@ export class KeapXmlRpcClient {
     }
   }
 
-  /**
-   * Query a table using DataService.query
-   */
   async query<T>(
     table: string,
     limit: number,
@@ -196,8 +194,8 @@ export class KeapXmlRpcClient {
   }
 
   /**
-   * Get ALL ProductInterest records, then filter for those with OpportunityId
-   * This approach avoids field existence issues by getting all records first
+   * Get ALL ProductInterest records
+   * Uses ObjectId field which links to Opportunity Id
    */
   async getAllProductInterests(): Promise<ProductInterest[]> {
     console.log('[XML-RPC] Fetching ALL ProductInterest records')
@@ -206,59 +204,28 @@ export class KeapXmlRpcClient {
     let page = 0
     const limit = 1000
     
-    try {
-      // Query with just Id and ProductId (these definitely exist)
-      // Then fetch OpportunityId separately or accept whatever fields come back
-      while (true) {
-        const batch = await this.query<ProductInterest>(
-          'ProductInterest',
-          limit,
-          page,
-          {}, // No filter - get ALL
-          ['Id', 'ProductId', 'OpportunityId'] // Try these fields
-        )
-        
-        if (batch.length === 0) break
-        allInterests.push(...batch)
-        
-        if (batch.length < limit) break // Last page
-        page++
-      }
-    } catch (err: any) {
-      // If OpportunityId doesn't work, try without it
-      if (err.message?.includes('OpportunityId')) {
-        console.log('[XML-RPC] OpportunityId field not available, trying ObjectId...')
-        page = 0
-        while (true) {
-          const batch = await this.query<any>(
-            'ProductInterest',
-            limit,
-            page,
-            {},
-            ['Id', 'ProductId', 'ObjectId']
-          )
-          
-          if (batch.length === 0) break
-          // Map ObjectId to OpportunityId for consistency
-          allInterests.push(...batch.map((b: any) => ({
-            Id: b.Id,
-            ProductId: b.ProductId,
-            OpportunityId: b.ObjectId
-          })))
-          
-          if (batch.length < limit) break
-          page++
-        }
-      } else {
-        throw err
-      }
+    // Fields from actual schema: Id, ObjectId, ProductId, Qty, DiscountPercent
+    while (true) {
+      const batch = await this.query<ProductInterest>(
+        'ProductInterest',
+        limit,
+        page,
+        {}, // No filter - get ALL
+        ['Id', 'ObjectId', 'ProductId', 'Qty', 'DiscountPercent']
+      )
+      
+      if (batch.length === 0) break
+      allInterests.push(...batch)
+      
+      if (batch.length < limit) break
+      page++
     }
     
     console.log(`[XML-RPC] Found ${allInterests.length} total ProductInterest records`)
     
-    // Filter to only those with an OpportunityId
-    const withOppId = allInterests.filter(pi => pi.OpportunityId != null && pi.OpportunityId > 0)
-    console.log(`[XML-RPC] ${withOppId.length} have OpportunityId`)
+    // Filter to only those with an ObjectId (which is the Opportunity Id)
+    const withOppId = allInterests.filter(pi => pi.ObjectId != null && pi.ObjectId > 0)
+    console.log(`[XML-RPC] ${withOppId.length} have ObjectId (Opportunity link)`)
     
     return withOppId
   }
@@ -273,7 +240,7 @@ export class KeapXmlRpcClient {
         1,
         0,
         { Id: productId },
-        ['Id', 'ProductName', 'ProductPrice']
+        ['Id', 'ProductName', 'ProductPrice', 'ShortDescription', 'Sku', 'Status']
       )
       return results.length > 0 ? results[0] : null
     } catch (err) {
@@ -283,38 +250,8 @@ export class KeapXmlRpcClient {
   }
 
   /**
-   * Get ALL StageMove records for a specific opportunity
-   */
-  async getOpportunityStageMoves(opportunityId: number): Promise<StageMove[]> {
-    console.log(`[XML-RPC] Getting stage moves for opportunity ${opportunityId}`)
-    
-    try {
-      // Try with Stage field first
-      return await this.query<StageMove>(
-        'StageMove',
-        100,
-        0,
-        { OpportunityId: opportunityId },
-        ['Id', 'OpportunityId', 'MoveDate', 'Stage']
-      )
-    } catch (err: any) {
-      // If Stage doesn't exist, try without it
-      if (err.message?.includes('Stage')) {
-        console.log('[XML-RPC] Stage field not available, querying without it')
-        return await this.query<StageMove>(
-          'StageMove',
-          100,
-          0,
-          { OpportunityId: opportunityId },
-          ['Id', 'OpportunityId', 'MoveDate']
-        )
-      }
-      throw err
-    }
-  }
-
-  /**
-   * Get ALL StageMove records (for batch analysis)
+   * Get ALL StageMove records
+   * Uses MoveToStage and MoveFromStage (IDs, not names)
    */
   async getAllStageMoves(): Promise<StageMove[]> {
     console.log('[XML-RPC] Fetching ALL StageMove records')
@@ -323,45 +260,21 @@ export class KeapXmlRpcClient {
     let page = 0
     const limit = 1000
     
-    try {
-      while (true) {
-        const batch = await this.query<StageMove>(
-          'StageMove',
-          limit,
-          page,
-          {},
-          ['Id', 'OpportunityId', 'MoveDate', 'Stage']
-        )
-        
-        if (batch.length === 0) break
-        allMoves.push(...batch)
-        
-        if (batch.length < limit) break
-        page++
-      }
-    } catch (err: any) {
-      // If Stage doesn't exist, try without it
-      if (err.message?.includes('Stage')) {
-        console.log('[XML-RPC] Stage field not available, querying without it')
-        page = 0
-        while (true) {
-          const batch = await this.query<StageMove>(
-            'StageMove',
-            limit,
-            page,
-            {},
-            ['Id', 'OpportunityId', 'MoveDate']
-          )
-          
-          if (batch.length === 0) break
-          allMoves.push(...batch)
-          
-          if (batch.length < limit) break
-          page++
-        }
-      } else {
-        throw err
-      }
+    // Fields from actual schema: Id, OpportunityId, MoveDate, MoveToStage, MoveFromStage
+    while (true) {
+      const batch = await this.query<StageMove>(
+        'StageMove',
+        limit,
+        page,
+        {},
+        ['Id', 'OpportunityId', 'MoveDate', 'MoveToStage', 'MoveFromStage', 'UserId']
+      )
+      
+      if (batch.length === 0) break
+      allMoves.push(...batch)
+      
+      if (batch.length < limit) break
+      page++
     }
     
     console.log(`[XML-RPC] Found ${allMoves.length} total StageMove records`)
@@ -371,30 +284,42 @@ export class KeapXmlRpcClient {
   /**
    * Analyze stage moves to find:
    * - MAX date (last updated) per opportunity
-   * - WON/LOST date (if stage name contains WON or LOST)
+   * - The most recent stage move (with MoveToStage ID)
+   * 
+   * Note: MoveToStage is an ID, not a name. Caller needs to map to stage names
+   * using the REST API pipeline stages data.
    */
-  getOutcomeFromStageMoves(moves: StageMove[]): {
+  analyzeOpportunityStageMoves(
+    moves: StageMove[],
+    stageIdToName?: Map<number, string>
+  ): {
     lastUpdated: string | null
+    latestStageId: number | null
+    latestStageName: string | null
     outcomeDate: string | null
     outcome: 'WON' | 'LOST' | null
   } {
     if (moves.length === 0) {
-      return { lastUpdated: null, outcomeDate: null, outcome: null }
+      return { lastUpdated: null, latestStageId: null, latestStageName: null, outcomeDate: null, outcome: null }
     }
 
-    // Find MAX date (most recent move)
+    // Sort by MoveDate descending (most recent first)
     const sortedByDate = [...moves].sort((a, b) => 
       new Date(b.MoveDate).getTime() - new Date(a.MoveDate).getTime()
     )
-    const lastUpdated = sortedByDate[0]?.MoveDate || null
+    
+    const latestMove = sortedByDate[0]
+    const lastUpdated = latestMove.MoveDate
+    const latestStageId = latestMove.MoveToStage
+    const latestStageName = stageIdToName?.get(latestStageId) || null
 
-    // Find WON or LOST move
+    // Find WON or LOST move by checking stage names
     let outcomeDate: string | null = null
     let outcome: 'WON' | 'LOST' | null = null
 
-    for (const move of sortedByDate) {
-      if (move.Stage) {
-        const stageName = move.Stage.toUpperCase()
+    if (stageIdToName) {
+      for (const move of sortedByDate) {
+        const stageName = stageIdToName.get(move.MoveToStage)?.toUpperCase() || ''
         if (stageName.includes('WON') || stageName.includes('CLOSED WON')) {
           outcomeDate = move.MoveDate
           outcome = 'WON'
@@ -408,11 +333,11 @@ export class KeapXmlRpcClient {
       }
     }
 
-    return { lastUpdated, outcomeDate, outcome }
+    return { lastUpdated, latestStageId, latestStageName, outcomeDate, outcome }
   }
 
   /**
-   * Build a map of OpportunityId -> Products with full product details
+   * Build a map of ObjectId (Opportunity Id) -> Products with full product details
    */
   async buildOpportunityProductMap(): Promise<Map<number, Array<ProductInterest & { product: Product | null }>>> {
     const productInterests = await this.getAllProductInterests()
@@ -430,18 +355,18 @@ export class KeapXmlRpcClient {
       }
     }
     
-    // Build result map grouped by OpportunityId
+    // Build result map grouped by ObjectId (which is Opportunity Id)
     const result = new Map<number, Array<ProductInterest & { product: Product | null }>>()
     
     for (const pi of productInterests) {
-      if (!pi.OpportunityId) continue
+      if (!pi.ObjectId) continue
       
-      const oppProducts = result.get(pi.OpportunityId) || []
+      const oppProducts = result.get(pi.ObjectId) || []
       oppProducts.push({
         ...pi,
         product: productMap.get(pi.ProductId) || null
       })
-      result.set(pi.OpportunityId, oppProducts)
+      result.set(pi.ObjectId, oppProducts)
     }
     
     console.log(`[XML-RPC] Built product map for ${result.size} opportunities`)
@@ -451,9 +376,13 @@ export class KeapXmlRpcClient {
   /**
    * Build a map of OpportunityId -> Stage move analysis
    */
-  async buildOpportunityStageMoveMap(): Promise<Map<number, {
+  async buildOpportunityStageMoveMap(
+    stageIdToName?: Map<number, string>
+  ): Promise<Map<number, {
     moves: StageMove[]
     lastUpdated: string | null
+    latestStageId: number | null
+    latestStageName: string | null
     outcomeDate: string | null
     outcome: 'WON' | 'LOST' | null
   }>> {
@@ -471,12 +400,14 @@ export class KeapXmlRpcClient {
     const result = new Map<number, {
       moves: StageMove[]
       lastUpdated: string | null
+      latestStageId: number | null
+      latestStageName: string | null
       outcomeDate: string | null
       outcome: 'WON' | 'LOST' | null
     }>()
     
     for (const [oppId, moves] of grouped.entries()) {
-      const analysis = this.getOutcomeFromStageMoves(moves)
+      const analysis = this.analyzeOpportunityStageMoves(moves, stageIdToName)
       result.set(oppId, { moves, ...analysis })
     }
     
