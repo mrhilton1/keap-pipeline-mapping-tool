@@ -110,7 +110,7 @@ export interface BulkCreateStagesRequest {
 export interface CreateDealRequest {
   name: string
   stage_id: string
-  status: "OPEN" | "WON" | "LOST"        // Required
+  status: "ACTIVE" | "WON" | "LOST"        // Required
   owners: Array<{ id: string }>           // Required - array with owner IDs
   task_ids: string[]                      // Required (can be empty)
   value: {                                // Required

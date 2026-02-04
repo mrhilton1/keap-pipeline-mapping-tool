@@ -35,7 +35,7 @@ interface DealRequestBody {
   estimated_close_time?: string
   created_time?: string         // Original creation date from opportunity
   last_updated_time?: string    // Original last updated date from opportunity
-  status?: "OPEN" | "WON" | "LOST"
+  status?: "ACTIVE" | "WON" | "LOST"
   custom_fields?: Record<string, any>
   task_ids?: string[]
   // Notes to create after deal
@@ -66,7 +66,7 @@ export async function POST(request: Request) {
       estimated_close_time,
       created_time,
       last_updated_time,
-      status = "OPEN",
+      status = "ACTIVE",
       custom_fields,
       task_ids = [],
       notes = []

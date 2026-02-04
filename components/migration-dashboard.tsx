@@ -85,11 +85,11 @@ export function MigrationDashboard() {
   
   // Pipeline outcomes
   const [outcomesModalOpen, setOutcomesModalOpen] = useState(false)
-  const [pipelineOutcomes, setPipelineOutcomes] = useState<Record<string, "OPEN" | "WON" | "LOST">>({})
+  const [pipelineOutcomes, setPipelineOutcomes] = useState<Record<string, "ACTIVE" | "WON" | "LOST">>({})
   const [selectedPipelineForOutcomes, setSelectedPipelineForOutcomes] = useState<Pipeline | null>(null)
   const [outcomesConfigured, setOutcomesConfigured] = useState(false)
   // Cache outcomes per pipeline to avoid re-fetching
-  const [outcomesCache, setOutcomesCache] = useState<Record<string, Record<string, "OPEN" | "WON" | "LOST">>>({})
+  const [outcomesCache, setOutcomesCache] = useState<Record<string, Record<string, "ACTIVE" | "WON" | "LOST">>>({})
   
   // Migration preview modal - enhanced with individual opportunity details
   const [previewModalOpen, setPreviewModalOpen] = useState(false)
@@ -102,7 +102,7 @@ export function MigrationDashboard() {
       stageId: string
       count: number
       isAutoMatched: boolean
-      status: "OPEN" | "WON" | "LOST"
+      status: "ACTIVE" | "WON" | "LOST"
     }>
     skippedOpps: Array<{ id: string; title: string; stageName: string | null }>
     totalToMigrate: number
@@ -112,7 +112,7 @@ export function MigrationDashboard() {
       opportunity: Opportunity
       targetStageName: string
       targetStageId: string
-      targetStatus: "OPEN" | "WON" | "LOST"
+      targetStatus: "ACTIVE" | "WON" | "LOST"
       value: number
       hasNotes: boolean
       noteCount: number
@@ -250,10 +250,10 @@ export function MigrationDashboard() {
           fetch(`/api/pipelines/${pipeline.id}/outcomes`)
             .then(res => res.json())
             .then(data => {
-              const outcomeMap: Record<string, "OPEN" | "WON" | "LOST"> = {}
+              const outcomeMap: Record<string, "ACTIVE" | "WON" | "LOST"> = {}
               pipeline.stages?.forEach(stage => {
                 const outcome = data.outcomes?.find((o: any) => o.stage_id === stage.id)
-                outcomeMap[stage.id] = outcome?.outcome_type || "OPEN"
+                outcomeMap[stage.id] = outcome?.outcome_type || "ACTIVE"
               })
               setOutcomesCache(prev => ({ ...prev, [pipeline.id]: outcomeMap }))
             })
@@ -380,7 +380,7 @@ export function MigrationDashboard() {
   }
 
   // Prefetch outcomes for a pipeline and cache them
-  const prefetchPipelineOutcomes = async (pipeline: Pipeline): Promise<Record<string, "OPEN" | "WON" | "LOST">> => {
+  const prefetchPipelineOutcomes = async (pipeline: Pipeline): Promise<Record<string, "ACTIVE" | "WON" | "LOST">> => {
     // Check cache first
     if (outcomesCache[pipeline.id]) {
       return outcomesCache[pipeline.id]
@@ -390,10 +390,10 @@ export function MigrationDashboard() {
       const response = await fetch(`/api/pipelines/${pipeline.id}/outcomes`)
       const data = await response.json()
       
-      const outcomeMap: Record<string, "OPEN" | "WON" | "LOST"> = {}
+      const outcomeMap: Record<string, "ACTIVE" | "WON" | "LOST"> = {}
       pipeline.stages?.forEach(stage => {
         const outcome = data.outcomes?.find((o: any) => o.stage_id === stage.id)
-        outcomeMap[stage.id] = outcome?.outcome_type || "OPEN"
+        outcomeMap[stage.id] = outcome?.outcome_type || "ACTIVE"
       })
       
       // Cache the result
@@ -401,9 +401,9 @@ export function MigrationDashboard() {
       return outcomeMap
     } catch {
       // Default all to OPEN
-      const defaultOutcomes: Record<string, "OPEN" | "WON" | "LOST"> = {}
+      const defaultOutcomes: Record<string, "ACTIVE" | "WON" | "LOST"> = {}
       pipeline.stages?.forEach(stage => {
-        defaultOutcomes[stage.id] = "OPEN"
+        defaultOutcomes[stage.id] = "ACTIVE"
       })
       return defaultOutcomes
     }
@@ -455,7 +455,7 @@ export function MigrationDashboard() {
   }
 
   // Compute migration preview for a pipeline
-  const computeMigrationPreview = (pipeline: Pipeline, outcomes: Record<string, "OPEN" | "WON" | "LOST"> = pipelineOutcomes) => {
+  const computeMigrationPreview = (pipeline: Pipeline, outcomes: Record<string, "ACTIVE" | "WON" | "LOST"> = pipelineOutcomes) => {
     console.log("[Preview] Computing with outcomes:", outcomes)
     const stageConfig = fieldMappingConfig?.stageMapping
     const selectedOpps = opportunities.filter(o => selectedOpportunities.has(o.id))
@@ -465,13 +465,13 @@ export function MigrationDashboard() {
                                      stageConfig?.perStageMappings && 
                                      stageConfig.perStageMappings.length > 0
     
-    const stageMappingsMap = new Map<string, { stageName: string; stageId: string; count: number; isAutoMatched: boolean; status: "OPEN" | "WON" | "LOST" }>()
+    const stageMappingsMap = new Map<string, { stageName: string; stageId: string; count: number; isAutoMatched: boolean; status: "ACTIVE" | "WON" | "LOST" }>()
     const skippedOpps: Array<{ id: string; title: string; stageName: string | null }> = []
     const opportunityDetails: Array<{
       opportunity: Opportunity
       targetStageName: string
       targetStageId: string
-      targetStatus: "OPEN" | "WON" | "LOST"
+      targetStatus: "ACTIVE" | "WON" | "LOST"
       value: number
       hasNotes: boolean
       noteCount: number
@@ -534,7 +534,7 @@ export function MigrationDashboard() {
       }
       
       if (targetStageId && targetStageName) {
-        const status = outcomes[targetStageId] || "OPEN"
+        const status = outcomes[targetStageId] || "ACTIVE"
         const existing = stageMappingsMap.get(targetStageId)
         if (existing) {
           existing.count++
@@ -635,7 +635,7 @@ export function MigrationDashboard() {
       const targetPipeline = pipelines.find(p => p.id === pipelineId)
       
       // Helper function to get stage ID and status for an opportunity
-      const getStageInfoForOpportunity = (opp: Opportunity): { stageId: string; status: "OPEN" | "WON" | "LOST" } | null => {
+      const getStageInfoForOpportunity = (opp: Opportunity): { stageId: string; status: "ACTIVE" | "WON" | "LOST" } | null => {
         let targetStageId: string | null = null
         const oppStageName = opp.stage?.name
         
@@ -673,12 +673,12 @@ export function MigrationDashboard() {
         if (!targetStageId) return null
         
         // Get status from pipeline outcomes config
-        const status = pipelineOutcomes[targetStageId] || "OPEN"
+        const status = pipelineOutcomes[targetStageId] || "ACTIVE"
         return { stageId: targetStageId, status }
       }
       
       // Pre-calculate which opportunities will be skipped
-      const oppsToMigrate: Array<{ opp: Opportunity; stageId: string; status: "OPEN" | "WON" | "LOST" }> = []
+      const oppsToMigrate: Array<{ opp: Opportunity; stageId: string; status: "ACTIVE" | "WON" | "LOST" }> = []
       const skippedOpps: Opportunity[] = []
       
       for (const opp of selectedOpps) {
@@ -1320,8 +1320,8 @@ export function MigrationDashboard() {
                   <div key={stage.id} className="flex items-center justify-between gap-4 p-2 bg-background rounded-md">
                     <span className="font-medium text-sm">{stage.name}</span>
                     <Select
-                      value={pipelineOutcomes[stage.id] || "OPEN"}
-                      onValueChange={(value: "OPEN" | "WON" | "LOST") => {
+                      value={pipelineOutcomes[stage.id] || "ACTIVE"}
+                      onValueChange={(value: "ACTIVE" | "WON" | "LOST") => {
                         setPipelineOutcomes(prev => ({ ...prev, [stage.id]: value }))
                       }}
                     >
@@ -1329,10 +1329,10 @@ export function MigrationDashboard() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="OPEN">
+                        <SelectItem value="ACTIVE">
                           <span className="flex items-center gap-2">
                             <span className="w-2 h-2 rounded-full bg-blue-500" />
-                            In Progress (OPEN)
+                            In Progress (ACTIVE)
                           </span>
                         </SelectItem>
                         <SelectItem value="WON">
