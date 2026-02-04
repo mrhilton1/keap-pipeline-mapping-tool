@@ -100,7 +100,7 @@ const STANDARD_DEAL_FIELDS: DealField[] = [
   { name: "value.amount", label: "Value (Amount)", type: "NUMBER", isCustom: false },
   { name: "value.currency", label: "Value (Currency)", type: "TEXT", isCustom: false },
   { name: "contacts.id", label: "Primary Contact (1:1)", type: "REF", isCustom: false },
-  { name: "owner_id", label: "Keap Original Owner", type: "REF", isCustom: false },
+  { name: "owner_id", label: "Keep Original Owner", type: "REF", isCustom: false },
   { name: "estimated_close_time", label: "Estimated Close", type: "DATETIME", isCustom: false },
   { name: "actual_close_time", label: "Actual Close Date", type: "DATETIME", isCustom: false },
   { name: "created_time", label: "Created Time", type: "DATETIME", isCustom: false },
@@ -119,7 +119,7 @@ const SPECIAL_DEAL_FIELDS: DealField[] = [
 // Descriptions for standard fields to explain what they do
 const FIELD_DESCRIPTIONS: Record<string, string> = {
   "contacts.id": "Each deal gets its own contact (by ID)",
-  "owner_id": "Each deal keeps its original Keap owner from the opportunity",
+  "owner_id": "Each deal keeps its original owner from the opportunity",
   "value.amount": "Numeric value only",
   "value.average": "Averages Low & High revenue (auto-links both fields)",
   "value.currency": "e.g., USD",
