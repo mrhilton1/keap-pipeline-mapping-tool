@@ -807,21 +807,54 @@ export function MigrationDashboard() {
 
       const skippedCount = skippedOpps.length
       
+      // Build detailed results for display
+      const resultsTitle = created > 0 ? "Migration Complete" : "Migration Failed"
+      let resultsDescription = ""
+      
       if (created > 0) {
-        let description = `Created ${created} deals`
-        if (failed > 0) description += `, ${failed} failed`
-        if (skippedCount > 0) description += `, ${skippedCount} skipped (no stage match)`
+        resultsDescription = `✓ Created ${created} deal${created !== 1 ? 's' : ''}`
+      }
+      if (failed > 0) {
+        resultsDescription += `${resultsDescription ? '\n' : ''}✗ ${failed} failed`
+      }
+      if (skippedCount > 0) {
+        resultsDescription += `${resultsDescription ? '\n' : ''}⊘ ${skippedCount} skipped (no stage match)`
+      }
+      
+      // Show toast with summary
+      toast({
+        title: resultsTitle,
+        description: resultsDescription || "No deals were created",
+        variant: created > 0 ? "default" : "destructive",
+        duration: 5000,
+      })
+      
+      // Show detailed error dialog if there were failures or skips
+      if (errors.length > 0 || skippedCount > 0) {
+        const errorDetails: string[] = []
         
-        toast({
-          title: "Migration Complete",
-          description,
-        })
-      } else {
-        toast({
-          title: "Migration Failed",
-          description: errors[0] || (skippedCount > 0 ? `All ${skippedCount} opportunities skipped (no stage match)` : "No deals were created"),
-          variant: "destructive"
-        })
+        if (errors.length > 0) {
+          errorDetails.push("**Failed:**")
+          errors.forEach(e => errorDetails.push(`• ${e}`))
+        }
+        
+        if (skippedCount > 0) {
+          if (errorDetails.length > 0) errorDetails.push("")
+          errorDetails.push("**Skipped (no matching stage):**")
+          skippedOpps.forEach(o => errorDetails.push(`• ${o.opportunity_title} (stage: ${o.stage?.name || 'none'})`))
+        }
+        
+        // Log detailed errors to console for debugging
+        console.error("[Migration] Detailed errors:", errorDetails.join('\n'))
+        
+        // Show a follow-up toast with details
+        setTimeout(() => {
+          toast({
+            title: "Migration Details",
+            description: errorDetails.slice(0, 5).join('\n') + (errorDetails.length > 5 ? `\n... and ${errorDetails.length - 5} more (see console)` : ''),
+            duration: 10000,
+          })
+        }, 500)
       }
       
       if (created > 0) {
@@ -1262,6 +1295,14 @@ export function MigrationDashboard() {
           
           {selectedPipelineForOutcomes && (
             <div className="space-y-4">
+              {/* Warning about close date */}
+              <Alert className="bg-amber-50 border-amber-200">
+                <AlertCircle className="h-4 w-4 text-amber-600" />
+                <AlertDescription className="text-xs text-amber-800">
+                  <strong>Note:</strong> Keap automatically sets the "Actual Close Date" to today when a deal is marked as WON or LOST. Leave stages as OPEN to avoid this.
+                </AlertDescription>
+              </Alert>
+              
               <div className="max-h-64 overflow-auto space-y-2 border rounded-lg p-3 bg-muted/30">
                 {selectedPipelineForOutcomes.stages?.map((stage) => (
                   <div key={stage.id} className="flex items-center justify-between gap-4 p-2 bg-background rounded-md">
