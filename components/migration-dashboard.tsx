@@ -256,15 +256,17 @@ export function MigrationDashboard() {
             // Merge enrichment data into opportunities
             enrichedOpps = opps.map((opp: Opportunity) => {
               const oppId = String(opp.id)
+              const stageData = enrichData.stageMoves?.[oppId]
               return {
                 ...opp,
                 products: enrichData.products?.[oppId] || [],
-                stageMoves: enrichData.stageMoves?.[oppId] || []
+                // stageMoves now includes analysis: { moves, lastUpdated, outcomeDate, outcome }
+                stageMoves: stageData || null
               }
             })
             
             const productsCount = Object.values(enrichData.products || {}).filter((p: any) => p?.length > 0).length
-            const stageMovesCount = Object.values(enrichData.stageMoves || {}).filter((m: any) => m?.length > 0).length
+            const stageMovesCount = Object.values(enrichData.stageMoves || {}).filter((m: any) => m?.moves?.length > 0).length
             console.log(`[Dashboard] Enriched: ${productsCount} with products, ${stageMovesCount} with stage moves`)
           } else {
             console.warn("[Dashboard] XML-RPC enrichment failed:", await enrichRes.text())

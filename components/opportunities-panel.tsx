@@ -22,21 +22,21 @@ import {
   Trophy
 } from "lucide-react"
 
-// Product from XML-RPC Lead (ProductInterest) table
+// Product from XML-RPC ProductInterest table
 export interface OpportunityProduct {
   Id: number
-  OpportunityId: number
+  ObjectId: number  // Links to Opportunity
   ProductId: number
   Qty: number
-  Price: number
-  Discount?: number
-  Notes?: string
+  DiscountPercent?: number
+  // Flat fields from enrichment
+  ProductName?: string
+  ProductPrice?: number
+  // Nested product object from enrichment
   product?: {
     Id: number
     ProductName: string
     ProductPrice: number
-    ProductDesc?: string
-    Sku?: string
   }
 }
 
@@ -87,13 +87,13 @@ export interface Opportunity {
       MoveDate: string
       MoveToStage: number
       MoveFromStage?: number
+      MoveToStageName?: string
+      MoveFromStageName?: string
     }>
     lastUpdated: string | null
-    latestStageId: number | null
-    latestStageName: string | null
     outcomeDate: string | null
     outcome: 'WON' | 'LOST' | null
-  }
+  } | null
 }
 
 interface OpportunitiesPanelProps {
@@ -129,6 +129,25 @@ export function OpportunitiesPanel({
     if (!dateStr) return null
     const date = new Date(dateStr)
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  }
+
+  // Format XML-RPC date format (20231101T12:40:09) to readable format
+  const formatStageMoveDate = (dateStr?: string) => {
+    if (!dateStr) return '-'
+    try {
+      // Handle ISO8601 format from XML-RPC (20231101T12:40:09)
+      const match = dateStr.match(/(\d{4})(\d{2})(\d{2})T(\d{2}):(\d{2}):(\d{2})/)
+      if (match) {
+        const [, year, month, day] = match
+        const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      }
+      // Fallback to standard date parsing
+      const date = new Date(dateStr)
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    } catch {
+      return dateStr
+    }
   }
 
   // Get unique stages for filter
@@ -451,11 +470,11 @@ export function OpportunitiesPanel({
                                 <span className="font-medium">Products ({opp.products.length})</span>
                               </div>
                               <div className="space-y-1.5">
-                                {opp.products.map((pi, idx) => (
+                                {opp.products.map((pi: any, idx) => (
                                   <div key={idx} className="flex items-center justify-between gap-2 text-xs">
                                     <div className="flex items-center gap-2">
                                       <span className="font-medium text-blue-800">
-                                        {pi.product?.ProductName || `Product #${pi.ProductId}`}
+                                        {pi.ProductName || pi.product?.ProductName || `Product #${pi.ProductId}`}
                                       </span>
                                       {pi.Qty > 1 && (
                                         <Badge variant="outline" className="text-[10px] bg-blue-100">
@@ -464,7 +483,7 @@ export function OpportunitiesPanel({
                                       )}
                                     </div>
                                     <span className="text-blue-600 font-medium">
-                                      ${pi.Price?.toLocaleString() || '0'}
+                                      ${(pi.ProductPrice || pi.product?.ProductPrice || 0).toLocaleString()}
                                     </span>
                                   </div>
                                 ))}
@@ -481,17 +500,50 @@ export function OpportunitiesPanel({
                                   {opp.stageMoves.moves.length} stage move(s)
                                 </span>
                                 {opp.stageMoves.outcome && (
-                                  <Badge variant={opp.stageMoves.outcome === 'WON' ? 'default' : 'destructive'} className="text-[10px] h-4">
+                                  <Badge 
+                                    className={`text-[10px] h-4 ${opp.stageMoves.outcome === 'WON' ? 'bg-green-500' : 'bg-red-500'}`}
+                                  >
                                     {opp.stageMoves.outcome}
                                   </Badge>
                                 )}
                               </div>
-                              <div className="mt-1 space-y-0.5 text-[10px] text-purple-600">
+                              
+                              {/* Analysis summary */}
+                              <div className="mt-1.5 grid grid-cols-2 gap-2 text-[10px]">
                                 {opp.stageMoves.lastUpdated && (
-                                  <div>Last: {new Date(opp.stageMoves.lastUpdated).toLocaleDateString()}</div>
+                                  <div className="text-purple-600">
+                                    <span className="text-purple-500">Last Activity:</span>{' '}
+                                    {formatStageMoveDate(opp.stageMoves.lastUpdated)}
+                                  </div>
                                 )}
-                                {opp.stageMoves.outcomeDate && (
-                                  <div>{opp.stageMoves.outcome} on: {new Date(opp.stageMoves.outcomeDate).toLocaleDateString()}</div>
+                                {opp.stageMoves.outcomeDate && opp.stageMoves.outcome && (
+                                  <div className={opp.stageMoves.outcome === 'WON' ? 'text-green-600' : 'text-red-600'}>
+                                    <span className="opacity-70">{opp.stageMoves.outcome}:</span>{' '}
+                                    {formatStageMoveDate(opp.stageMoves.outcomeDate)}
+                                  </div>
+                                )}
+                              </div>
+                              
+                              {/* Stage move history */}
+                              <div className="mt-2 space-y-1 border-t border-purple-200 pt-2">
+                                {opp.stageMoves.moves.slice(0, 5).map((move: any, idx: number) => (
+                                  <div key={idx} className="flex items-center justify-between text-[10px]">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-purple-400">{formatStageMoveDate(move.MoveDate)}</span>
+                                      <span className="text-purple-600">→</span>
+                                      <span className="font-medium text-purple-800">{move.MoveToStageName}</span>
+                                    </div>
+                                    {move.MoveFromStageName && move.MoveFromStageName !== move.MoveToStageName && (
+                                      <span className="text-purple-400 text-[9px]">
+                                        from {move.MoveFromStageName}
+                                      </span>
+                                    )}
+                                  </div>
+                                ))}
+                                {opp.stageMoves.moves.length > 5 && (
+                                  <div className="text-[10px] text-purple-400">
+                                    +{opp.stageMoves.moves.length - 5} more...
+                                  </div>
                                 )}
                               </div>
                             </div>

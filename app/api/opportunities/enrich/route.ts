@@ -90,9 +90,14 @@ export async function POST(request: Request) {
       console.error(`[Enrich API] Product lookup failed:`, err)
     }
     
-    // Results maps
+    // Results maps - keyed by opportunity ID
     const products: Record<string, any[]> = {}
-    const stageMoves: Record<string, any[]> = {}
+    const stageMoveData: Record<string, {
+      moves: any[]
+      lastUpdated: string | null
+      outcomeDate: string | null
+      outcome: 'WON' | 'LOST' | null
+    }> = {}
     
     // Step 3: Process each opportunity ID
     for (const oppId of opportunityIds) {
@@ -109,12 +114,22 @@ export async function POST(request: Request) {
         )
         const productList = Array.isArray(productResult) ? productResult : []
         if (productList.length > 0) {
-          // Enrich with product names and prices
-          const enrichedProducts = productList.map(pi => ({
-            ...pi,
-            ProductName: productMap.get(pi.ProductId)?.name || 'Unknown',
-            ProductPrice: productMap.get(pi.ProductId)?.price || 0
-          }))
+          // Enrich with nested product object (matches UI expectations)
+          const enrichedProducts = productList.map(pi => {
+            const productDetails = productMap.get(pi.ProductId)
+            return {
+              ...pi,
+              // Flat fields for backward compatibility
+              ProductName: productDetails?.name || 'Unknown',
+              ProductPrice: productDetails?.price || 0,
+              // Nested product object for UI
+              product: productDetails ? {
+                Id: pi.ProductId,
+                ProductName: productDetails.name,
+                ProductPrice: productDetails.price
+              } : null
+            }
+          })
           products[String(numericId)] = enrichedProducts
           console.log(`[Enrich API] Opp #${numericId}: ${productList.length} products`)
         }
@@ -139,8 +154,41 @@ export async function POST(request: Request) {
             MoveToStageName: stageMap.get(sm.MoveToStage) || `Stage #${sm.MoveToStage}`,
             MoveFromStageName: sm.MoveFromStage ? (stageMap.get(sm.MoveFromStage) || `Stage #${sm.MoveFromStage}`) : null
           }))
-          stageMoves[String(numericId)] = enrichedMoves
-          console.log(`[Enrich API] Opp #${numericId}: ${stageMoveList.length} stage moves`)
+          
+          // Analyze stage moves - find lastUpdated (MAX date) and outcome date
+          const sortedByDate = [...enrichedMoves].sort((a, b) => {
+            const dateA = a.MoveDate || ''
+            const dateB = b.MoveDate || ''
+            return dateB.localeCompare(dateA)  // Descending
+          })
+          
+          const lastUpdated = sortedByDate[0]?.MoveDate || null
+          
+          // Find WON or LOST outcome
+          let outcomeDate: string | null = null
+          let outcome: 'WON' | 'LOST' | null = null
+          
+          for (const move of sortedByDate) {
+            const stageName = (move.MoveToStageName || '').toUpperCase()
+            if (stageName.includes('WON') || stageName.includes('WIN') || stageName.includes('CLOSED WON')) {
+              outcomeDate = move.MoveDate
+              outcome = 'WON'
+              break
+            }
+            if (stageName.includes('LOST') || stageName.includes('CLOSED LOST')) {
+              outcomeDate = move.MoveDate
+              outcome = 'LOST'
+              break
+            }
+          }
+          
+          stageMoveData[String(numericId)] = {
+            moves: enrichedMoves,
+            lastUpdated,
+            outcomeDate,
+            outcome
+          }
+          console.log(`[Enrich API] Opp #${numericId}: ${stageMoveList.length} stage moves, outcome: ${outcome || 'none'}`)
         }
       } catch (err) {
         console.error(`[Enrich API] StageMove error for Opp #${numericId}:`, err)
@@ -148,14 +196,14 @@ export async function POST(request: Request) {
     }
 
     const productsCount = Object.keys(products).length
-    const stageMovesCount = Object.keys(stageMoves).length
+    const stageMovesCount = Object.keys(stageMoveData).length
     
     console.log(`[Enrich API] Complete! Products for ${productsCount} opps, StageMoves for ${stageMovesCount} opps`)
 
     return NextResponse.json({ 
       products,
-      stageMoves,
-      stages: Object.fromEntries(stageMap),  // Include stage lookup for reference
+      stageMoves: stageMoveData,  // Now includes analysis (lastUpdated, outcomeDate, outcome)
+      stages: Object.fromEntries(stageMap),
       summary: {
         requested: opportunityIds.length,
         withProducts: productsCount,
