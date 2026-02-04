@@ -17,8 +17,28 @@ import {
   Mail,
   Phone,
   FileText,
-  Clock
+  Clock,
+  Package,
+  Trophy
 } from "lucide-react"
+
+// Product from XML-RPC Lead (ProductInterest) table
+export interface OpportunityProduct {
+  Id: number
+  OpportunityId: number
+  ProductId: number
+  Qty: number
+  Price: number
+  Discount?: number
+  Notes?: string
+  product?: {
+    Id: number
+    ProductName: string
+    ProductPrice: number
+    ProductDesc?: string
+    Sku?: string
+  }
+}
 
 export interface Opportunity {
   id: string
@@ -58,6 +78,12 @@ export interface Opportunity {
     id: number
     content: any
   }>
+  // XML-RPC enrichment data
+  products?: OpportunityProduct[]
+  outcomeDate?: {
+    date: string
+    outcome: 'WON' | 'LOST'
+  } | null
 }
 
 interface OpportunitiesPanelProps {
@@ -404,6 +430,54 @@ export function OpportunitiesPanel({
                               <p className="text-muted-foreground whitespace-pre-wrap line-clamp-3">
                                 {opp.opportunity_notes}
                               </p>
+                            </div>
+                          )}
+                          
+                          {/* Products (from XML-RPC) */}
+                          {opp.products && opp.products.length > 0 && (
+                            <div className="mt-2 p-2 bg-blue-50 rounded border border-blue-200">
+                              <div className="flex items-center gap-1.5 text-blue-700 mb-2">
+                                <Package className="w-3 h-3" />
+                                <span className="font-medium">Products ({opp.products.length})</span>
+                              </div>
+                              <div className="space-y-1.5">
+                                {opp.products.map((pi, idx) => (
+                                  <div key={idx} className="flex items-center justify-between gap-2 text-xs">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-medium text-blue-800">
+                                        {pi.product?.ProductName || `Product #${pi.ProductId}`}
+                                      </span>
+                                      {pi.Qty > 1 && (
+                                        <Badge variant="outline" className="text-[10px] bg-blue-100">
+                                          x{pi.Qty}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <span className="text-blue-600 font-medium">
+                                      ${pi.Price?.toLocaleString() || '0'}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Outcome Date (from XML-RPC StageMove) */}
+                          {opp.outcomeDate && (
+                            <div className={`mt-2 p-2 rounded border ${
+                              opp.outcomeDate.outcome === 'WON' 
+                                ? 'bg-green-50 border-green-200' 
+                                : 'bg-red-50 border-red-200'
+                            }`}>
+                              <div className={`flex items-center gap-2 text-xs ${
+                                opp.outcomeDate.outcome === 'WON' ? 'text-green-700' : 'text-red-700'
+                              }`}>
+                                <Trophy className="w-3 h-3" />
+                                <span className="font-medium">
+                                  {opp.outcomeDate.outcome === 'WON' ? 'Won' : 'Lost'} on{' '}
+                                  {new Date(opp.outcomeDate.date).toLocaleDateString()}
+                                </span>
+                              </div>
                             </div>
                           )}
                           

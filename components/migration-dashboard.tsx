@@ -236,11 +236,49 @@ export function MigrationDashboard() {
 
       const opps = oppData.opportunities || []
       const loadedPipelines = pipelineData.pipelines || []
-      setOpportunities(opps)
       setPipelines(loadedPipelines)
       
+      // Enrich opportunities with XML-RPC data (products, stage moves)
+      let enrichedOpps = opps
+      if (opps.length > 0) {
+        try {
+          console.log("[Dashboard] Enriching opportunities with XML-RPC data...")
+          const enrichRes = await fetch("/api/opportunities/enrich", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ opportunityIds: opps.map((o: Opportunity) => o.id) })
+          })
+          
+          if (enrichRes.ok) {
+            const enrichData = await enrichRes.json()
+            console.log("[Dashboard] XML-RPC enrichment response:", enrichData)
+            
+            // Merge enrichment data into opportunities
+            enrichedOpps = opps.map((opp: Opportunity) => {
+              const oppId = String(opp.id)
+              return {
+                ...opp,
+                products: enrichData.products?.[oppId] || [],
+                outcomeDate: enrichData.outcomeDates?.[oppId] || null
+              }
+            })
+            
+            const productsCount = Object.values(enrichData.products || {}).filter((p: any) => p?.length > 0).length
+            const outcomesCount = Object.values(enrichData.outcomeDates || {}).filter((d: any) => d !== null).length
+            console.log(`[Dashboard] Enriched: ${productsCount} with products, ${outcomesCount} with outcome dates`)
+          } else {
+            console.warn("[Dashboard] XML-RPC enrichment failed:", await enrichRes.text())
+          }
+        } catch (enrichErr) {
+          console.warn("[Dashboard] XML-RPC enrichment error (non-fatal):", enrichErr)
+          // Continue without enrichment - it's optional
+        }
+      }
+      
+      setOpportunities(enrichedOpps)
+      
       // Extract unique stages for the stage selector
-      const stages = extractUniqueStages(opps)
+      const stages = extractUniqueStages(enrichedOpps)
       setAvailableStages(stages)
       
       // Prefetch outcomes for all pipelines in the background
