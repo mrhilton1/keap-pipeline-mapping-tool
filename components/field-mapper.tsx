@@ -222,14 +222,17 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, initialPi
   
   // Pipelines for stage mapping
   const [pipelines, setPipelines] = useState<Pipeline[]>(propPipelines || [])
-  const [stageMapping, setStageMappingState] = useState<StageMapping>(savedConfig?.stageMapping || {
-    pipelineId: null,
-    pipelineName: null,
-    stageId: null,
-    stageName: null,
-    perStageMappings: [],
-    fallbackStageId: null,
-    fallbackStageName: null
+  const [stageMapping, setStageMappingState] = useState<StageMapping>(() => {
+    const saved = savedConfig?.stageMapping
+    return {
+      pipelineId: saved?.pipelineId || null,
+      pipelineName: saved?.pipelineName || null,
+      stageId: saved?.stageId || null,
+      stageName: saved?.stageName || null,
+      perStageMappings: saved?.perStageMappings || [],
+      fallbackStageId: saved?.fallbackStageId || null,
+      fallbackStageName: saved?.fallbackStageName || null
+    }
   })
   
   // Users for owner mapping
@@ -689,9 +692,10 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, initialPi
   }
 
   // Computed stats for stage mapping
-  const autoMatchedStages = stageMapping.perStageMappings.filter(p => p.isAutoMatched)
-  const unmatchedStages = stageMapping.perStageMappings.filter(p => !p.isAutoMatched && !p.targetStageId)
-  const manuallyMappedStages = stageMapping.perStageMappings.filter(p => !p.isAutoMatched && p.targetStageId)
+  const perStageMappingsArray = stageMapping.perStageMappings || []
+  const autoMatchedStages = perStageMappingsArray.filter(p => p.isAutoMatched)
+  const unmatchedStages = perStageMappingsArray.filter(p => !p.isAutoMatched && !p.targetStageId)
+  const manuallyMappedStages = perStageMappingsArray.filter(p => !p.isAutoMatched && p.targetStageId)
   
   // Count opportunities that would be skipped (unmatched + no fallback)
   const skippedOpportunityCount = stageMapping.fallbackStageId 
