@@ -539,13 +539,13 @@ export function OpportunitiesPanel({
                             </div>
                           )}
                           
-                          {/* Order Revenue (from XML-RPC Lead table) */}
+                          {/* One Time Order Revenue (from XML-RPC Lead table) */}
                           {opp.orderRevenue && opp.orderRevenue > 0 && (
                             <div className="mt-2 p-2 rounded border bg-emerald-50 border-emerald-200">
                               <div className="flex items-center justify-between text-xs">
                                 <div className="flex items-center gap-1.5 text-emerald-700">
                                   <DollarSign className="w-3 h-3" />
-                                  <span className="font-medium">Order Revenue</span>
+                                  <span className="font-medium">One Time Order Revenue</span>
                                   {opp.stageMoves?.outcome === 'WON' && (
                                     <Badge className="text-[9px] h-3.5 bg-emerald-500 text-white ml-1">
                                       used for deal value

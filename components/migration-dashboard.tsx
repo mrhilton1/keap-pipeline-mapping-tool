@@ -91,6 +91,9 @@ export function MigrationDashboard() {
   // Cache outcomes per pipeline to avoid re-fetching
   const [outcomesCache, setOutcomesCache] = useState<Record<string, Record<string, "ACTIVE" | "WON" | "LOST">>>({})
   
+  // Custom migration note (added FIRST to all deals)
+  const [customMigrationNote, setCustomMigrationNote] = useState("")
+  
   // Migration preview modal - enhanced with individual opportunity details
   const [previewModalOpen, setPreviewModalOpen] = useState(false)
   const [previewIndex, setPreviewIndex] = useState(0)  // For carousel navigation
@@ -753,8 +756,62 @@ export function MigrationDashboard() {
       
       for (const { opp, stageId: finalStageId, status } of oppsToMigrate) {
         try {
+          // Helper: Process merge fields in custom note template
+          const processMergeFields = (template: string, opportunity: Opportunity): string => {
+            let processed = template
+            processed = processed.replace(/{opportunity_title}/g, opportunity.opportunity_title || '')
+            processed = processed.replace(/{contact\.first_name}/g, opportunity.contact?.first_name || '')
+            processed = processed.replace(/{contact\.last_name}/g, opportunity.contact?.last_name || '')
+            processed = processed.replace(/{contact\.email}/g, opportunity.contact?.email || '')
+            processed = processed.replace(/{contact\.company_name}/g, opportunity.contact?.company_name || '')
+            processed = processed.replace(/{stage\.name}/g, opportunity.stage?.name || '')
+            processed = processed.replace(/{user\.first_name}/g, opportunity.user?.first_name || '')
+            processed = processed.replace(/{user\.last_name}/g, opportunity.user?.last_name || '')
+            return processed
+          }
+          
           // Build notes array
           const notes: Array<{ body: string; created_by?: string; created_time?: string }> = []
+          
+          // Add custom migration note FIRST (if exists)
+          if (customMigrationNote && customMigrationNote.trim()) {
+            notes.push({
+              body: processMergeFields(customMigrationNote, opp),
+              created_by: opp.user?.id?.toString(),
+              created_time: new Date().toISOString()
+            })
+          }
+          
+          // Add products as formatted note (if mapped or default)
+          const productsMapping = fieldMappingConfig?.mappings?.find(m => m.sourceField === "products")
+          const shouldAddProductsNote = !productsMapping || productsMapping.targetField === "_products_note"
+          
+          if (shouldAddProductsNote && (opp as any).products && Array.isArray((opp as any).products) && (opp as any).products.length > 0) {
+            const products = (opp as any).products
+            let productsBody = "PRODUCTS:\n\n"
+            products.forEach((p: any) => {
+              const qty = p.Qty || 1
+              const price = p.ProductPrice || 0
+              const total = qty * price
+              const productName = p.ProductName || 'Unknown Product'
+              
+              // Format subscription products differently
+              if (p.subscription?.isSubscription) {
+                const cycle = p.subscription.cycle || 'month'
+                productsBody += `• ${productName} (Subscription)\n`
+                productsBody += `  ${qty}x $${price.toFixed(2)}/${cycle}\n`
+              } else {
+                productsBody += `• ${productName}\n`
+                productsBody += `  ${qty}x $${price.toFixed(2)} = $${total.toFixed(2)}\n`
+              }
+            })
+            
+            notes.push({
+              body: productsBody.trim(),
+              created_by: opp.user?.id?.toString(),
+              created_time: opp.date_created
+            })
+          }
           
           // Add opportunity notes (oldest first)
           if (opp.opportunity_notes && opp.opportunity_notes.trim()) {
@@ -1631,6 +1688,23 @@ export function MigrationDashboard() {
                   </div>
                 </div>
               )}
+              
+              {/* Custom Migration Note */}
+              <div className="space-y-2 border rounded-lg p-3 bg-muted/20">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-medium">Custom Migration Note (Optional)</h4>
+                  <Badge variant="outline" className="text-[10px]">Added first to all deals</Badge>
+                </div>
+                <textarea
+                  value={customMigrationNote}
+                  onChange={(e) => setCustomMigrationNote(e.target.value)}
+                  placeholder="Enter a note to add to all migrated deals... Use merge fields: {opportunity_title}, {contact.first_name}, {contact.last_name}, {stage.name}, {user.first_name}"
+                  className="w-full min-h-[80px] p-2 text-xs border rounded bg-background resize-y"
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  Available merge fields: <code>{'{opportunity_title}'}</code>, <code>{'{contact.first_name}'}</code>, <code>{'{contact.last_name}'}</code>, <code>{'{contact.email}'}</code>, <code>{'{stage.name}'}</code>, <code>{'{user.first_name}'}</code>, <code>{'{user.last_name}'}</code>
+                </p>
+              </div>
               
               {/* Action buttons */}
               <div className="flex gap-2 pt-2 border-t">
