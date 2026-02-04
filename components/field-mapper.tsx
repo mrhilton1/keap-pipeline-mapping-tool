@@ -149,6 +149,10 @@ const HIDDEN_SOURCE_FIELDS = [
   "contact.first_name",
   "contact.last_name",
   "contact.company_name",
+  // Stage move fields - outcome name not needed, lastUpdated is duplicate of last_updated
+  "stageMoves.outcome",       // WON/LOST - not a mappable field
+  "stageMoves.lastUpdated",   // Duplicate of REST API last_updated
+  "stageMoves.moves",         // Raw moves array - not directly mappable
   "contact.phone_number",
   "contact.job_title",
 ]
