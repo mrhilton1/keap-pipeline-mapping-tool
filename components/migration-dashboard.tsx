@@ -128,7 +128,7 @@ export function MigrationDashboard() {
   // Handle custom stage creation - add to available stages list
   const handleStageCreated = (stageName: string) => {
     // Check if stage already exists
-    if (!availableStages.some(s => s.name.toLowerCase() === stageName.toLowerCase())) {
+    if (!availableStages.some(s => (s.name || '').toLowerCase() === (stageName || '').toLowerCase())) {
       setAvailableStages(prev => [
         { name: stageName, isCustom: true, count: 0 },
         ...prev
@@ -536,7 +536,7 @@ export function MigrationDashboard() {
         return null
       }
       const match = pipeline.stages.find(
-        s => s.name.toLowerCase() === oppStageName.toLowerCase()
+        s => (s.name || '').toLowerCase() === (oppStageName || '').toLowerCase()
       )
       console.log(`[Preview] Match result:`, match ? match.name : "NO MATCH")
       return match
@@ -551,7 +551,7 @@ export function MigrationDashboard() {
       if (hasExplicitStageMapping && stageConfig) {
         // Use explicit smart mapping from field mapper
         const mapping = stageConfig.perStageMappings.find(
-          m => oppStageName && m.opportunityStageName.toLowerCase() === oppStageName.toLowerCase()
+          m => oppStageName && (m.opportunityStageName || '').toLowerCase() === (oppStageName || '').toLowerCase()
         )
         
         if (mapping?.targetStageId && mapping?.targetStageName) {
@@ -697,7 +697,7 @@ export function MigrationDashboard() {
           } else {
             // Find matching per-stage mapping (case-insensitive)
             const mapping = stageConfig.perStageMappings.find(
-              m => m.opportunityStageName.toLowerCase() === oppStageName.toLowerCase()
+              m => (m.opportunityStageName || '').toLowerCase() === (oppStageName || '').toLowerCase()
             )
             targetStageId = mapping?.targetStageId || stageConfig.fallbackStageId || null
           }
@@ -705,7 +705,7 @@ export function MigrationDashboard() {
           // Auto-match by stage name (case-insensitive)
           if (oppStageName && targetPipeline?.stages) {
             const matchedStage = targetPipeline.stages.find(
-              s => s.name.toLowerCase() === oppStageName.toLowerCase()
+              s => (s.name || '').toLowerCase() === (oppStageName || '').toLowerCase()
             )
             if (matchedStage) {
               targetStageId = matchedStage.id
