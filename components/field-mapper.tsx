@@ -600,11 +600,11 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, initialPi
       // Compute auto-matched stages
       const perStageMappings = opportunityStages.map(oppStage => {
         const matchedStage = pipelineStages.find(
-          ps => ps.name.toLowerCase() === oppStage.name.toLowerCase()
+          ps => (ps.name || '').toLowerCase() === (oppStage.name || '').toLowerCase()
         )
         return {
-          opportunityStageName: oppStage.name,
-          opportunityCount: oppStage.count,
+          opportunityStageName: oppStage.name || '',
+          opportunityCount: oppStage.count || 0,
           targetStageId: matchedStage?.id || null,
           targetStageName: matchedStage?.name || null,
           isAutoMatched: !!matchedStage
@@ -631,11 +631,11 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, initialPi
     return opportunityStages.map(oppStage => {
       // Try to find a matching stage (case-insensitive)
       const matchedStage = pipelineStages.find(
-        ps => ps.name.toLowerCase() === oppStage.name.toLowerCase()
+        ps => (ps.name || '').toLowerCase() === (oppStage.name || '').toLowerCase()
       )
       return {
-        opportunityStageName: oppStage.name,
-        opportunityCount: oppStage.count,
+        opportunityStageName: oppStage.name || '',
+        opportunityCount: oppStage.count || 0,
         targetStageId: matchedStage?.id || null,
         targetStageName: matchedStage?.name || null,
         isAutoMatched: !!matchedStage

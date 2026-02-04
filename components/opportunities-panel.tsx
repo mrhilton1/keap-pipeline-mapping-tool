@@ -174,7 +174,7 @@ export function OpportunitiesPanel({
   // Filter opportunities
   const filtered = opportunities.filter(opp => {
     const matchesSearch = searchTerm === "" || 
-      opp.opportunity_title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (opp.opportunity_title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       opp.contact?.first_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       opp.contact?.last_name?.toLowerCase().includes(searchTerm.toLowerCase())
     
@@ -491,12 +491,20 @@ export function OpportunitiesPanel({
                                 {opp.products.map((pi: any, idx) => {
                                   const isCalculated = pi.CalculatedPrice !== undefined
                                   const isUnknown = pi.ProductName === 'Unknown'
-                                  const isSubscription = pi.subscription?.isSubscription
+                                  const isSubscription = pi.subscription?.isSubscription === true
                                   const displayPrice = pi.ProductPrice || pi.product?.ProductPrice || 0
                                   
-                                  // Format subscription billing cycle
+                                  // Format subscription billing cycle - handle both string and number cycle values
+                                  // Cycle can be: "Week" (3), "Month" (2), "Year" (1), "Day" (6)
+                                  const formatCycle = (cycle: any): string => {
+                                    if (!cycle) return ''
+                                    if (typeof cycle === 'string') return cycle.toLowerCase()
+                                    // Handle numeric cycle values
+                                    const cycleMap: Record<number, string> = { 1: 'year', 2: 'month', 3: 'week', 6: 'day' }
+                                    return cycleMap[cycle] || String(cycle)
+                                  }
                                   const billingCycle = isSubscription && pi.subscription?.cycle 
-                                    ? `/${pi.subscription.cycle.toLowerCase()}` 
+                                    ? `/${formatCycle(pi.subscription.cycle)}` 
                                     : ''
                                   
                                   return (
@@ -505,7 +513,7 @@ export function OpportunitiesPanel({
                                         <span className={`font-medium ${isUnknown ? 'text-gray-500 italic' : isSubscription ? 'text-purple-800' : 'text-blue-800'}`}>
                                           {pi.ProductName || pi.product?.ProductName || `Product #${pi.ProductId}`}
                                         </span>
-                                        {pi.Qty > 1 && (
+                                        {(pi.Qty || 0) > 1 && (
                                           <Badge variant="outline" className="text-[10px] bg-blue-100">
                                             x{pi.Qty}
                                           </Badge>
@@ -522,7 +530,7 @@ export function OpportunitiesPanel({
                                         )}
                                       </div>
                                       <span className={`font-medium whitespace-nowrap ${isCalculated && !isUnknown ? 'text-green-600' : isSubscription ? 'text-purple-600' : 'text-blue-600'}`}>
-                                        ${displayPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{billingCycle}
+                                        ${(displayPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{billingCycle}
                                       </span>
                                     </div>
                                   )
