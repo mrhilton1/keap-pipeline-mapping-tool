@@ -35,6 +35,9 @@ const TESTS = [
   { id: 'stages', name: 'Stage Table', description: 'Get all stages (ID → Name lookup)' },
   { id: 'products', name: 'Products (Full Chain)', description: 'ProductInterest → Product lookup for opportunity', needsOppId: true },
   { id: 'productinterest', name: 'ProductInterest Only', description: 'Raw ProductInterest records', needsOppId: true },
+  { id: 'producttable', name: 'Product Table (All)', description: 'All products with Id, Name, Price, Sku, Status' },
+  { id: 'productoptvalue', name: 'ProductOptValue (All)', description: 'All product option values (variations, pricing)' },
+  { id: 'productopt', name: 'ProductOpt (All)', description: 'Product options (option types/categories)' },
   { id: 'stagemove', name: 'Stage Moves', description: 'Stage move history with names & analysis', needsOppId: true },
 ]
 

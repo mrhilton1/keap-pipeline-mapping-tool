@@ -399,6 +399,69 @@ export async function GET(request: Request) {
         })
       }
 
+      case 'producttable': {
+        // Get ALL products with all relevant fields
+        const result = await xmlRpcCall(
+          accessToken, 
+          'Product', 
+          1000, 
+          { 'Id': '~>~0' },  // All products
+          ['Id', 'ProductName', 'ProductPrice', 'Sku', 'Status', 'Description', 'ShortDescription', 'Taxable', 'Weight']
+        )
+        return NextResponse.json({
+          test: 'producttable',
+          description: 'All Products',
+          success: result.success,
+          recordCount: result.data?.length || 0,
+          data: result.data,
+          error: result.error,
+          requestXml: result.requestXml,
+          responseXml: result.rawXml
+        })
+      }
+
+      case 'productoptvalue': {
+        // Get all ProductOptValue records
+        const result = await xmlRpcCall(
+          accessToken, 
+          'ProductOptValue', 
+          1000, 
+          { 'Id': '~>~0' },  // All records
+          ['Id', 'ProductOptionId', 'Name', 'Sku', 'Price', 'PriceType', 'Label', 'IsDefault', 'OrderIndex']
+        )
+        return NextResponse.json({
+          test: 'productoptvalue',
+          description: 'All Product Option Values',
+          success: result.success,
+          recordCount: result.data?.length || 0,
+          data: result.data,
+          error: result.error,
+          requestXml: result.requestXml,
+          responseXml: result.rawXml
+        })
+      }
+
+      case 'productopt': {
+        // Get all ProductOpt records (option types)
+        const result = await xmlRpcCall(
+          accessToken, 
+          'ProductOpt', 
+          1000, 
+          { 'Id': '~>~0' },  // All records
+          ['Id', 'ProductId', 'Name', 'Type', 'Required', 'OrderIndex', 'TextMessage']
+        )
+        return NextResponse.json({
+          test: 'productopt',
+          description: 'All Product Options',
+          success: result.success,
+          recordCount: result.data?.length || 0,
+          data: result.data,
+          error: result.error,
+          requestXml: result.requestXml,
+          responseXml: result.rawXml
+        })
+      }
+
       default:
         return NextResponse.json({ error: `Unknown test: ${test}` }, { status: 400 })
     }
