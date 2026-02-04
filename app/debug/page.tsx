@@ -34,7 +34,8 @@ interface TestResult {
 const TESTS = [
   { id: 'stages', name: 'Stage Table', description: 'Get all stages (ID → Name lookup)' },
   { id: 'products', name: 'Products (Full Chain)', description: 'ProductInterest → Product lookup for opportunity', needsOppId: true },
-  { id: 'productinterest', name: 'ProductInterest Only', description: 'Raw ProductInterest records', needsOppId: true },
+  { id: 'productinterest', name: 'ProductInterest (Expanded)', description: 'ProductInterest with ALL price fields', needsOppId: true },
+  { id: 'productinterestbundle', name: 'ProductInterestBundle', description: 'Bundled product interest records (may have custom prices)', needsOppId: true },
   { id: 'producttable', name: 'Product Table (All)', description: 'All products with Id, Name, Price, Sku, Status' },
   { id: 'productoptvalue', name: 'ProductOptValue (All)', description: 'All product option values (variations, pricing)' },
   { id: 'productopt', name: 'ProductOpt (All)', description: 'Product options (option types/categories)' },

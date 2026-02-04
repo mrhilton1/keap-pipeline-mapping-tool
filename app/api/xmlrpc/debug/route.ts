@@ -295,16 +295,47 @@ export async function GET(request: Request) {
       }
 
       case 'productinterest': {
+        // Query with ALL possible fields to find where custom price is stored
         const result = await xmlRpcCall(
           accessToken, 
           'ProductInterest', 
           100, 
           { ObjectId: numericOppId }, 
-          ['Id', 'ObjectId', 'ProductId', 'Qty', 'DiscountPercent']
+          [
+            'Id', 'ObjectId', 'ProductId', 'Qty', 'DiscountPercent',
+            // Try these additional fields for custom pricing
+            'OnetimePrice', 'ProductPrice', 'Price', 'UnitPrice', 
+            'PricePerUnit', 'CustomPrice', 'OverridePrice', 'ItemPrice',
+            'OnetimeTax', 'Tax', 'Subtotal', 'Total', 'Amount'
+          ]
         )
         return NextResponse.json({
           test: 'productinterest',
-          description: `ProductInterest for Opportunity #${oppId}`,
+          description: `ProductInterest for Opportunity #${oppId} (expanded fields)`,
+          success: result.success,
+          recordCount: result.data?.length || 0,
+          data: result.data,
+          error: result.error,
+          requestXml: result.requestXml,
+          responseXml: result.rawXml
+        })
+      }
+
+      case 'productinterestbundle': {
+        // Try ProductInterestBundle table - might have custom pricing
+        const result = await xmlRpcCall(
+          accessToken, 
+          'ProductInterestBundle', 
+          100, 
+          { 'Id': '~>~0' },
+          [
+            'Id', 'ProductInterestId', 'ProductId', 'Qty', 'Price', 
+            'ProductPrice', 'BundlePrice', 'ItemPrice', 'UnitPrice'
+          ]
+        )
+        return NextResponse.json({
+          test: 'productinterestbundle',
+          description: 'All ProductInterestBundle records',
           success: result.success,
           recordCount: result.data?.length || 0,
           data: result.data,
