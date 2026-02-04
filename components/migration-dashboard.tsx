@@ -969,6 +969,45 @@ export function MigrationDashboard() {
             })
           }
           
+          // Add stage history as note (if mapped to _deal_notes)
+          const stageHistoryMapping = fieldMappingConfig?.mappings?.find(m => m.sourceField === "stageMoves.history")
+          const shouldAddStageHistory = stageHistoryMapping?.targetField === "_deal_notes"
+          
+          if (shouldAddStageHistory) {
+            const stageMoves = (opp as any).stageMoves
+            const moves = Array.isArray(stageMoves) ? stageMoves : (stageMoves?.moves || [])
+            
+            if (moves.length > 0) {
+              // Format stage history
+              let historyBody = "STAGE HISTORY:\n\n"
+              moves.forEach((m: any) => {
+                // Parse XML-RPC date
+                let dateStr = ''
+                if (m.MoveDate) {
+                  const match = m.MoveDate.match(/^(\d{4})(\d{2})(\d{2})T(\d{2}):(\d{2}):(\d{2})$/)
+                  if (match) {
+                    const [, year, month, day] = match
+                    dateStr = `${month}/${day}/${year}`
+                  } else {
+                    const parsed = new Date(m.MoveDate)
+                    if (!isNaN(parsed.getTime())) {
+                      dateStr = parsed.toLocaleDateString()
+                    }
+                  }
+                }
+                const from = m.MoveFromStageName || 'Unknown'
+                const to = m.MoveToStageName || 'Unknown'
+                historyBody += `• ${dateStr}: ${from} → ${to}\n`
+              })
+              
+              notes.push({
+                body: historyBody.trim(),
+                created_by: opp.user?.id?.toString(),
+                created_time: opp.date_created
+              })
+            }
+          }
+          
           // Add value - check if using average or single amount
           // For WON deals, use OrderRevenue from Lead table if available
           const revenueHigh = opp.projected_revenue_high || 0

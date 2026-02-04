@@ -171,6 +171,7 @@ const DEFAULT_MAPPINGS: Record<string, string> = {
   "user.id": "owner_id",                 // User ID → Keep Original Owner (default)
   "estimated_close_date": "estimated_close_time",
   "stageMoves.outcomeDate": "closed_time",  // WON/LOST date → Actual Close Date
+  "stageMoves.history": "_deal_notes",   // Stage history → Deal notes API
   "date_created": "created_time",        // Preserve original creation date
   "last_updated": "last_updated_time",   // Preserve last updated date
   "stage.name": "_stage_mapping",         // Stage name → Smart Pipeline stage mapping
@@ -338,7 +339,9 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, initialPi
             })
           }
         } else if (key === 'stageMoves' && value && typeof value === 'object') {
-          // Handle stageMoves object specially - expose outcomeDate as mappable field
+          // Handle stageMoves object specially - expose all useful fields
+          
+          // Outcome Date (WON/LOST date)
           if (value.outcomeDate) {
             const existing = fieldMap.get('stageMoves.outcomeDate')
             const existingSamples = existing?.sampleValues || []
@@ -350,7 +353,51 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, initialPi
               count: (existing?.count || 0) + 1
             })
           }
-          // Don't process other stageMoves fields (they're in HIDDEN_SOURCE_FIELDS)
+          
+          // Last Updated (last stage move date)
+          if (value.lastUpdated) {
+            const existing = fieldMap.get('stageMoves.lastUpdated')
+            const existingSamples = existing?.sampleValues || []
+            fieldMap.set('stageMoves.lastUpdated', {
+              path: 'stageMoves.lastUpdated',
+              label: 'Stage Moves → Last Updated',
+              type: 'TEXT',
+              sampleValues: existingSamples.length < 3 ? [...existingSamples, value.lastUpdated.substring(0, 50)] : existingSamples,
+              count: (existing?.count || 0) + 1
+            })
+          }
+          
+          // Outcome (WON/LOST)
+          if (value.outcome) {
+            const existing = fieldMap.get('stageMoves.outcome')
+            const existingSamples = existing?.sampleValues || []
+            fieldMap.set('stageMoves.outcome', {
+              path: 'stageMoves.outcome',
+              label: 'Stage Moves → Outcome (WON/LOST)',
+              type: 'TEXT',
+              sampleValues: existingSamples.length < 3 ? [...existingSamples, value.outcome] : existingSamples,
+              count: (existing?.count || 0) + 1
+            })
+          }
+          
+          // Stage History (full formatted history for notes)
+          const moves = Array.isArray(value) ? value : (value.moves || [])
+          if (moves.length > 0) {
+            const existing = fieldMap.get('stageMoves.history')
+            const existingSamples = existing?.sampleValues || []
+            const historyPreview = moves.slice(0, 2).map((m: any) => 
+              `${m.MoveFromStageName || '?'} → ${m.MoveToStageName || '?'}`
+            ).join(', ')
+            const sample = moves.length > 2 ? `${historyPreview}... (${moves.length} moves)` : historyPreview
+            
+            fieldMap.set('stageMoves.history', {
+              path: 'stageMoves.history',
+              label: 'Stage Moves → Full History',
+              type: 'LONG_TEXT',
+              sampleValues: existingSamples.length < 3 ? [...existingSamples, sample] : existingSamples,
+              count: (existing?.count || 0) + 1
+            })
+          }
         } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
           // Nested object
           processObject(value, `${prefix}${key}.`, `${labelPrefix}${formatLabel(key)} → `)
