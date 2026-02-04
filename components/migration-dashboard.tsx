@@ -563,13 +563,27 @@ export function MigrationDashboard() {
           targetStageId = mapping.targetStageId
           targetStageName = mapping.targetStageName
           isAutoMatched = mapping.isAutoMatched
-        } else if (stageConfig.fallbackStageId && stageConfig.fallbackStageName) {
-          targetStageId = stageConfig.fallbackStageId
-          targetStageName = stageConfig.fallbackStageName + " (fallback)"
-          isAutoMatched = false
+          console.log(`[Preview] Explicit mapping: "${oppStageName}" → "${targetStageName}"`)
+        } else {
+          // Mapping exists but has no target - try auto-match by name first
+          const matchedStage = findMatchingStage(oppStageName)
+          if (matchedStage) {
+            targetStageId = matchedStage.id
+            targetStageName = matchedStage.name
+            isAutoMatched = true
+            console.log(`[Preview] Fallback auto-match: "${oppStageName}" → "${matchedStage.name}"`)
+          } else if (stageConfig.fallbackStageId && stageConfig.fallbackStageName) {
+            // Use configured fallback
+            targetStageId = stageConfig.fallbackStageId
+            targetStageName = stageConfig.fallbackStageName + " (fallback)"
+            isAutoMatched = false
+            console.log(`[Preview] Using fallback stage: "${stageConfig.fallbackStageName}"`)
+          } else {
+            console.log(`[Preview] No match and no fallback for: "${oppStageName}"`)
+          }
         }
       } else {
-        // Auto-match by stage name first, then fall back to first stage
+        // No explicit mapping - auto-match by stage name
         const matchedStage = findMatchingStage(oppStageName)
         if (matchedStage) {
           targetStageId = matchedStage.id
@@ -577,13 +591,13 @@ export function MigrationDashboard() {
           isAutoMatched = true
           console.log(`[Preview] Auto-matched "${oppStageName}" → "${matchedStage.name}"`)
         } else {
-          // No match - use first stage as fallback
+          // No match - use first stage as fallback (implicit fallback)
           const firstStage = pipeline.stages?.[0]
           if (firstStage) {
             targetStageId = firstStage.id
             targetStageName = firstStage.name
             isAutoMatched = false
-            console.log(`[Preview] No match for "${oppStageName}", using fallback: "${firstStage.name}"`)
+            console.log(`[Preview] No match for "${oppStageName}", using first stage: "${firstStage.name}"`)
           }
         }
       }
@@ -704,7 +718,29 @@ export function MigrationDashboard() {
             const mapping = stageConfig.perStageMappings.find(
               m => (m.opportunityStageName || '').toLowerCase() === (oppStageName || '').toLowerCase()
             )
-            targetStageId = mapping?.targetStageId || stageConfig.fallbackStageId || null
+            
+            if (mapping?.targetStageId) {
+              targetStageId = mapping.targetStageId
+              console.log(`[Migration] Explicit mapping: "${oppStageName}" → stage ${targetStageId}`)
+            } else {
+              // Mapping exists but has no target - try auto-match by name
+              if (targetPipeline?.stages) {
+                const autoMatch = targetPipeline.stages.find(
+                  s => (s.name || '').toLowerCase() === (oppStageName || '').toLowerCase()
+                )
+                if (autoMatch) {
+                  targetStageId = autoMatch.id
+                  console.log(`[Migration] Fallback auto-match: "${oppStageName}" → "${autoMatch.name}"`)
+                }
+              }
+              // If still no match, use fallback stage
+              if (!targetStageId) {
+                targetStageId = stageConfig.fallbackStageId || null
+                if (targetStageId) {
+                  console.log(`[Migration] Using fallback stage for "${oppStageName}"`)
+                }
+              }
+            }
           }
         } else {
           // Auto-match by stage name (case-insensitive)
