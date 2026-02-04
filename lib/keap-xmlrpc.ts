@@ -164,17 +164,18 @@ export class KeapXmlRpcClient {
 
   /**
    * Create XML-RPC client using OAuth access token
-   * The same OAuth token used for REST API works for XML-RPC!
+   * Token is passed in Authorization header, not as method parameter
    */
   constructor(accessToken: string) {
     this.accessToken = accessToken
-    // XML-RPC endpoint - same for all accounts when using OAuth
+    // XML-RPC endpoint for OAuth
     this.endpoint = 'https://api.infusionsoft.com/crm/xmlrpc/v1'
   }
 
   private async call(method: string, params: any[]): Promise<any> {
-    // With OAuth, we pass access token as first param
-    const fullParams = [this.accessToken, ...params]
+    // With OAuth, token goes in Authorization header (not as first param)
+    // First param should be the "private key" which is empty string for OAuth
+    const fullParams = ['', ...params]
     const body = buildMethodCall(method, fullParams)
 
     console.log(`[XML-RPC] Calling ${method}`)
@@ -183,6 +184,7 @@ export class KeapXmlRpcClient {
       method: 'POST',
       headers: {
         'Content-Type': 'application/xml',
+        'Authorization': `Bearer ${this.accessToken}`,
       },
       body
     })
