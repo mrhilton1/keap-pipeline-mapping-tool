@@ -761,14 +761,103 @@ export function MigrationDashboard() {
           // Helper: Process merge fields in custom note template
           const processMergeFields = (template: string, opportunity: Opportunity): string => {
             let processed = template
+            const oppAny = opportunity as any
+            
+            // Opportunity fields
             processed = processed.replace(/{opportunity_title}/g, opportunity.opportunity_title || '')
+            processed = processed.replace(/{id}/g, String(opportunity.id || ''))
+            processed = processed.replace(/{date_created}/g, opportunity.date_created ? new Date(opportunity.date_created).toLocaleDateString() : '')
+            processed = processed.replace(/{last_updated}/g, opportunity.last_updated ? new Date(opportunity.last_updated).toLocaleDateString() : '')
+            processed = processed.replace(/{estimated_close_date}/g, opportunity.estimated_close_date ? new Date(opportunity.estimated_close_date).toLocaleDateString() : '')
+            processed = processed.replace(/{projected_revenue_low}/g, opportunity.projected_revenue_low ? `$${opportunity.projected_revenue_low.toLocaleString()}` : '')
+            processed = processed.replace(/{projected_revenue_high}/g, opportunity.projected_revenue_high ? `$${opportunity.projected_revenue_high.toLocaleString()}` : '')
+            processed = processed.replace(/{next_action_date}/g, opportunity.next_action_date ? new Date(opportunity.next_action_date).toLocaleDateString() : '')
+            processed = processed.replace(/{affiliate_id}/g, String(opportunity.affiliate_id || ''))
+            
+            // Contact fields
             processed = processed.replace(/{contact\.first_name}/g, opportunity.contact?.first_name || '')
             processed = processed.replace(/{contact\.last_name}/g, opportunity.contact?.last_name || '')
             processed = processed.replace(/{contact\.email}/g, opportunity.contact?.email || '')
             processed = processed.replace(/{contact\.company_name}/g, opportunity.contact?.company_name || '')
+            processed = processed.replace(/{contact\.job_title}/g, opportunity.contact?.job_title || '')
+            processed = processed.replace(/{contact\.phone_number}/g, opportunity.contact?.phone_number || '')
+            processed = processed.replace(/{contact\.id}/g, String(opportunity.contact?.id || ''))
+            
+            // Stage fields
             processed = processed.replace(/{stage\.name}/g, opportunity.stage?.name || '')
+            processed = processed.replace(/{stage\.id}/g, String(opportunity.stage?.id || ''))
+            
+            // User/Owner fields
             processed = processed.replace(/{user\.first_name}/g, opportunity.user?.first_name || '')
             processed = processed.replace(/{user\.last_name}/g, opportunity.user?.last_name || '')
+            processed = processed.replace(/{user\.id}/g, String(opportunity.user?.id || ''))
+            
+            // XML-RPC: Stage Moves/History
+            const stageMoves = oppAny.stageMoves
+            if (stageMoves) {
+              processed = processed.replace(/{stageMoves\.lastUpdated}/g, stageMoves.lastUpdated ? new Date(stageMoves.lastUpdated).toLocaleDateString() : '')
+              processed = processed.replace(/{stageMoves\.outcomeDate}/g, stageMoves.outcomeDate ? new Date(stageMoves.outcomeDate).toLocaleDateString() : '')
+              processed = processed.replace(/{stageMoves\.outcome}/g, stageMoves.outcome || '')
+              
+              // Stage moves array (moves or just the array itself)
+              const moves = Array.isArray(stageMoves) ? stageMoves : (stageMoves.moves || [])
+              processed = processed.replace(/{stageMoves\.count}/g, String(moves.length))
+              
+              // Format history
+              const history = moves.map((m: any) => {
+                const date = m.MoveDate ? new Date(m.MoveDate.replace('T', ' ')).toLocaleDateString() : ''
+                const from = m.MoveFromStageName || 'Unknown'
+                const to = m.MoveToStageName || 'Unknown'
+                return `${date}: ${from} → ${to}`
+              }).join('\n')
+              processed = processed.replace(/{stageMoves\.history}/g, history)
+            } else {
+              processed = processed.replace(/{stageMoves\.lastUpdated}/g, '')
+              processed = processed.replace(/{stageMoves\.outcomeDate}/g, '')
+              processed = processed.replace(/{stageMoves\.outcome}/g, '')
+              processed = processed.replace(/{stageMoves\.count}/g, '0')
+              processed = processed.replace(/{stageMoves\.history}/g, '')
+            }
+            
+            // XML-RPC: Products
+            const products = oppAny.products || []
+            if (Array.isArray(products) && products.length > 0) {
+              processed = processed.replace(/{products\.count}/g, String(products.length))
+              
+              // Product names (comma separated)
+              const names = products.map((p: any) => p.ProductName || 'Unknown').filter((n: string) => n !== 'Unknown').join(', ')
+              processed = processed.replace(/{products\.names}/g, names)
+              
+              // Total value
+              const total = products.reduce((sum: number, p: any) => {
+                const price = p.ProductPrice || 0
+                const qty = p.Qty || 1
+                return sum + (price * qty)
+              }, 0)
+              processed = processed.replace(/{products\.total}/g, `$${total.toFixed(2)}`)
+              
+              // Full formatted list
+              const list = products.map((p: any) => {
+                const name = p.ProductName || 'Unknown'
+                const qty = p.Qty || 1
+                const price = p.ProductPrice || 0
+                if (p.subscription?.isSubscription) {
+                  const cycle = p.subscription?.cycle || 'month'
+                  return `• ${name}: ${qty}x $${price.toFixed(2)}/${cycle}`
+                }
+                return `• ${name}: ${qty}x $${price.toFixed(2)} = $${(qty * price).toFixed(2)}`
+              }).join('\n')
+              processed = processed.replace(/{products\.list}/g, list)
+            } else {
+              processed = processed.replace(/{products\.count}/g, '0')
+              processed = processed.replace(/{products\.names}/g, '')
+              processed = processed.replace(/{products\.total}/g, '$0.00')
+              processed = processed.replace(/{products\.list}/g, '')
+            }
+            
+            // XML-RPC: Order Revenue
+            processed = processed.replace(/{orderRevenue}/g, oppAny.orderRevenue ? `$${oppAny.orderRevenue.toLocaleString()}` : '')
+            
             return processed
           }
           
@@ -1851,6 +1940,124 @@ export function MigrationDashboard() {
                                 { field: '{user.first_name}', label: 'First Name' },
                                 { field: '{user.last_name}', label: 'Last Name' },
                                 { field: '{user.id}', label: 'User ID' },
+                              ].map((item) => (
+                                <DropdownMenuItem
+                                  key={item.field}
+                                  className="text-xs"
+                                  onClick={() => {
+                                    const textarea = customNoteTextareaRef.current
+                                    if (textarea) {
+                                      const start = textarea.selectionStart
+                                      const end = textarea.selectionEnd
+                                      const newValue = customMigrationNote.substring(0, start) + item.field + customMigrationNote.substring(end)
+                                      setCustomMigrationNote(newValue)
+                                      setTimeout(() => {
+                                        textarea.focus()
+                                        textarea.setSelectionRange(start + item.field.length, start + item.field.length)
+                                      }, 0)
+                                    }
+                                  }}
+                                >
+                                  <code className="text-[10px] mr-2">{item.field}</code>
+                                  <span className="text-muted-foreground">{item.label}</span>
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuSubContent>
+                          </DropdownMenuPortal>
+                        </DropdownMenuSub>
+                        
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel className="text-[10px] text-muted-foreground">XML-RPC Enriched Data</DropdownMenuLabel>
+                        
+                        {/* Stage History/Moves Fields (XML-RPC) */}
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger className="text-xs">
+                            <Calendar className="w-3 h-3 mr-2" />
+                            Stage History (XML-RPC)
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuPortal>
+                            <DropdownMenuSubContent>
+                              {[
+                                { field: '{stageMoves.lastUpdated}', label: 'Last Stage Move Date' },
+                                { field: '{stageMoves.outcomeDate}', label: 'Outcome Date (WON/LOST)' },
+                                { field: '{stageMoves.outcome}', label: 'Outcome (WON/LOST)' },
+                                { field: '{stageMoves.count}', label: 'Total Stage Moves' },
+                                { field: '{stageMoves.history}', label: 'Full Stage History' },
+                              ].map((item) => (
+                                <DropdownMenuItem
+                                  key={item.field}
+                                  className="text-xs"
+                                  onClick={() => {
+                                    const textarea = customNoteTextareaRef.current
+                                    if (textarea) {
+                                      const start = textarea.selectionStart
+                                      const end = textarea.selectionEnd
+                                      const newValue = customMigrationNote.substring(0, start) + item.field + customMigrationNote.substring(end)
+                                      setCustomMigrationNote(newValue)
+                                      setTimeout(() => {
+                                        textarea.focus()
+                                        textarea.setSelectionRange(start + item.field.length, start + item.field.length)
+                                      }, 0)
+                                    }
+                                  }}
+                                >
+                                  <code className="text-[10px] mr-2">{item.field}</code>
+                                  <span className="text-muted-foreground">{item.label}</span>
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuSubContent>
+                          </DropdownMenuPortal>
+                        </DropdownMenuSub>
+                        
+                        {/* Products Fields (XML-RPC) */}
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger className="text-xs">
+                            <DollarSign className="w-3 h-3 mr-2" />
+                            Products (XML-RPC)
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuPortal>
+                            <DropdownMenuSubContent>
+                              {[
+                                { field: '{products.list}', label: 'All Products (formatted)' },
+                                { field: '{products.count}', label: 'Number of Products' },
+                                { field: '{products.total}', label: 'Total Products Value' },
+                                { field: '{products.names}', label: 'Product Names (comma)' },
+                              ].map((item) => (
+                                <DropdownMenuItem
+                                  key={item.field}
+                                  className="text-xs"
+                                  onClick={() => {
+                                    const textarea = customNoteTextareaRef.current
+                                    if (textarea) {
+                                      const start = textarea.selectionStart
+                                      const end = textarea.selectionEnd
+                                      const newValue = customMigrationNote.substring(0, start) + item.field + customMigrationNote.substring(end)
+                                      setCustomMigrationNote(newValue)
+                                      setTimeout(() => {
+                                        textarea.focus()
+                                        textarea.setSelectionRange(start + item.field.length, start + item.field.length)
+                                      }, 0)
+                                    }
+                                  }}
+                                >
+                                  <code className="text-[10px] mr-2">{item.field}</code>
+                                  <span className="text-muted-foreground">{item.label}</span>
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuSubContent>
+                          </DropdownMenuPortal>
+                        </DropdownMenuSub>
+                        
+                        {/* Revenue Fields (XML-RPC) */}
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger className="text-xs">
+                            <DollarSign className="w-3 h-3 mr-2" />
+                            Revenue (XML-RPC)
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuPortal>
+                            <DropdownMenuSubContent>
+                              {[
+                                { field: '{orderRevenue}', label: 'One Time Order Revenue' },
                               ].map((item) => (
                                 <DropdownMenuItem
                                   key={item.field}
