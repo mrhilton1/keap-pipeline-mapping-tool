@@ -3,15 +3,14 @@ import { NextResponse } from "next/server"
 import { KeapXmlRpcClient } from "@/lib/keap-xmlrpc"
 
 /**
- * Batch endpoint to enrich opportunities with:
- * - Products (from ProductInterest + Product tables)
- * - Stage moves (from StageMove table) - for last updated and WON/LOST date tracking
+ * Enrich opportunities with XML-RPC data
  * 
- * New approach:
- * 1. Pull ALL ProductInterest records, filter by OpportunityId != null
- * 2. Look up Product table for name/price
- * 3. Pull ALL StageMove records
- * 4. Analyze for MAX date (last updated) and any WON/LOST moves
+ * Flow:
+ * 1. Receive array of opportunity IDs from frontend
+ * 2. For EACH opportunity ID, query XML-RPC:
+ *    - ProductInterest (by ObjectId = opportunityId)
+ *    - StageMove (by OpportunityId = opportunityId)
+ * 3. Return aggregated results
  * 
  * POST body: { opportunityIds: number[] }
  */
@@ -39,53 +38,69 @@ export async function POST(request: Request) {
     }
 
     console.log(`[Enrich API] Enriching ${opportunityIds.length} opportunities`)
+    console.log(`[Enrich API] Opportunity IDs:`, opportunityIds)
     
     const client = new KeapXmlRpcClient(accessToken.value)
-    const oppIdSet = new Set(opportunityIds.map(id => Number(id)))
     
-    // Fetch ALL data first, then filter to requested IDs
-    const [productMap, stageMoveMap] = await Promise.all([
-      client.buildOpportunityProductMap(),
-      client.buildOpportunityStageMoveMap()
-    ])
-
-    // Filter to only requested opportunity IDs
+    // Results maps
     const products: Record<string, any[]> = {}
-    const stageMoves: Record<string, {
-      moves: any[]
-      lastUpdated: string | null
-      outcomeDate: string | null
-      outcome: 'WON' | 'LOST' | null
-    }> = {}
-
-    for (const oppId of oppIdSet) {
-      // Products
-      const oppProducts = productMap.get(oppId)
-      if (oppProducts && oppProducts.length > 0) {
-        products[String(oppId)] = oppProducts
+    const stageMoves: Record<string, any[]> = {}
+    
+    // Process each opportunity ID sequentially to avoid rate limits
+    // (Can parallelize later if needed)
+    for (const oppId of opportunityIds) {
+      const numericId = Number(oppId)
+      console.log(`[Enrich API] Querying XML-RPC for Opportunity #${numericId}`)
+      
+      // Query ProductInterest for this opportunity
+      try {
+        const productResult = await client.query(
+          'ProductInterest',
+          100,
+          0,
+          { ObjectId: numericId },  // ObjectId links to Opportunity
+          ['Id', 'ObjectId', 'ProductId', 'Qty', 'DiscountPercent']
+        )
+        const productList = Array.isArray(productResult) ? productResult : []
+        if (productList.length > 0) {
+          products[String(numericId)] = productList
+          console.log(`[Enrich API] Opp #${numericId}: ${productList.length} products`)
+        }
+      } catch (err) {
+        console.error(`[Enrich API] ProductInterest error for Opp #${numericId}:`, err)
       }
-
-      // Stage moves with analysis
-      const oppStageMoves = stageMoveMap.get(oppId)
-      if (oppStageMoves) {
-        stageMoves[String(oppId)] = oppStageMoves
+      
+      // Query StageMove for this opportunity
+      try {
+        const stageMoveResult = await client.query(
+          'StageMove',
+          100,
+          0,
+          { OpportunityId: numericId },
+          ['Id', 'OpportunityId', 'MoveDate', 'MoveToStage', 'MoveFromStage']
+        )
+        const stageMoveList = Array.isArray(stageMoveResult) ? stageMoveResult : []
+        if (stageMoveList.length > 0) {
+          stageMoves[String(numericId)] = stageMoveList
+          console.log(`[Enrich API] Opp #${numericId}: ${stageMoveList.length} stage moves`)
+        }
+      } catch (err) {
+        console.error(`[Enrich API] StageMove error for Opp #${numericId}:`, err)
       }
     }
 
-    const productsFound = Object.keys(products).length
-    const stageMovesFound = Object.keys(stageMoves).length
+    const productsCount = Object.keys(products).length
+    const stageMovesCount = Object.keys(stageMoves).length
     
-    console.log(`[Enrich API] Enriched ${opportunityIds.length} opportunities`)
-    console.log(`[Enrich API] Products found for ${productsFound} opportunities`)
-    console.log(`[Enrich API] Stage moves found for ${stageMovesFound} opportunities`)
+    console.log(`[Enrich API] Complete! Products for ${productsCount} opps, StageMoves for ${stageMovesCount} opps`)
 
     return NextResponse.json({ 
       products,
       stageMoves,
       summary: {
         requested: opportunityIds.length,
-        productsFound,
-        stageMovesFound
+        withProducts: productsCount,
+        withStageMoves: stageMovesCount
       }
     })
   } catch (error) {
