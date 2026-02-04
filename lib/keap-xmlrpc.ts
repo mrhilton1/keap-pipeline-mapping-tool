@@ -1,6 +1,8 @@
 /**
  * Keap XML-RPC API Client
  * 
+ * Uses the same OAuth access token as REST API - no separate API key needed!
+ * 
  * Used for accessing legacy tables not available in REST API:
  * - Lead (ProductInterest) - links opportunities to products
  * - Product - product details
@@ -157,20 +159,22 @@ export interface StageMove {
 }
 
 export class KeapXmlRpcClient {
-  private apiKey: string
-  private appName: string
+  private accessToken: string
   private endpoint: string
 
-  constructor(apiKey: string, appName: string) {
-    this.apiKey = apiKey
-    this.appName = appName
-    // XML-RPC endpoint format: https://{appName}.infusionsoft.com/api/xmlrpc
-    this.endpoint = `https://${appName}.infusionsoft.com/api/xmlrpc`
+  /**
+   * Create XML-RPC client using OAuth access token
+   * The same OAuth token used for REST API works for XML-RPC!
+   */
+  constructor(accessToken: string) {
+    this.accessToken = accessToken
+    // XML-RPC endpoint - same for all accounts when using OAuth
+    this.endpoint = 'https://api.infusionsoft.com/crm/xmlrpc/v1'
   }
 
   private async call(method: string, params: any[]): Promise<any> {
-    // Insert API key as first param (required for all XML-RPC calls)
-    const fullParams = [this.apiKey, ...params]
+    // With OAuth, we pass access token as first param
+    const fullParams = [this.accessToken, ...params]
     const body = buildMethodCall(method, fullParams)
 
     console.log(`[XML-RPC] Calling ${method}`)

@@ -1,3 +1,4 @@
+import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
 import { KeapXmlRpcClient } from "@/lib/keap-xmlrpc"
 
@@ -20,23 +21,21 @@ export async function POST(request: Request) {
       }, { status: 400 })
     }
 
-    // Get XML-RPC credentials from env
-    const apiKey = process.env.KEAP_XMLRPC_API_KEY
-    const appName = process.env.KEAP_APP_NAME
+    // Use OAuth access token (same as REST API)
+    const cookieStore = await cookies()
+    const accessToken = cookieStore.get("keap_access_token")
 
-    if (!apiKey || !appName) {
-      console.warn("[Enrich API] XML-RPC not configured - returning empty enrichment data")
+    if (!accessToken?.value) {
       return NextResponse.json({ 
-        configured: false,
-        message: "XML-RPC not configured. Set KEAP_XMLRPC_API_KEY and KEAP_APP_NAME.",
+        error: "Not authenticated",
         products: {},
         outcomeDates: {}
-      })
+      }, { status: 401 })
     }
 
     console.log(`[Enrich API] Enriching ${opportunityIds.length} opportunities`)
     
-    const client = new KeapXmlRpcClient(apiKey, appName)
+    const client = new KeapXmlRpcClient(accessToken.value)
     
     // Batch fetch products and outcome dates
     const [productsMap, outcomeDatesMap] = await Promise.all([
@@ -60,7 +59,6 @@ export async function POST(request: Request) {
     console.log(`[Enrich API] Outcome dates found for ${Object.keys(outcomeDates).filter(k => outcomeDates[k] !== null).length} opportunities`)
 
     return NextResponse.json({ 
-      configured: true,
       products,
       outcomeDates
     })

@@ -1,3 +1,4 @@
+import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
 import { KeapXmlRpcClient } from "@/lib/keap-xmlrpc"
 
@@ -12,20 +13,19 @@ export async function GET(
       return NextResponse.json({ error: "Invalid opportunity ID" }, { status: 400 })
     }
 
-    // Get XML-RPC credentials from env
-    const apiKey = process.env.KEAP_XMLRPC_API_KEY
-    const appName = process.env.KEAP_APP_NAME
+    // Use OAuth access token (same as REST API)
+    const cookieStore = await cookies()
+    const accessToken = cookieStore.get("keap_access_token")
 
-    if (!apiKey || !appName) {
+    if (!accessToken?.value) {
       return NextResponse.json({ 
-        error: "XML-RPC not configured",
-        details: "Set KEAP_XMLRPC_API_KEY and KEAP_APP_NAME in environment variables",
+        error: "Not authenticated",
         stageMoves: [],
         outcomeDate: null
-      })
+      }, { status: 401 })
     }
 
-    const client = new KeapXmlRpcClient(apiKey, appName)
+    const client = new KeapXmlRpcClient(accessToken.value)
     
     // Get all stage moves and outcome date
     const [stageMoves, outcomeDate] = await Promise.all([
