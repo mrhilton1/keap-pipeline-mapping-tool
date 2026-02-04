@@ -134,17 +134,15 @@ export async function POST(request: Request) {
 
     console.log("[Deals API] Deal created:", deal.id)
     
-    // Create notes if provided (oldest first)
+    // Create notes if provided
+    // IMPORTANT: Maintain insertion order - custom migration note should be FIRST
+    // Do NOT sort by date - the order from the client is intentional
+    // Add small delay between notes to help maintain order in Keap
     if (notes.length > 0 && deal.id) {
-      console.log(`[Deals API] Creating ${notes.length} notes for deal ${deal.id}`)
+      console.log(`[Deals API] Creating ${notes.length} notes for deal ${deal.id} (in order)`)
       
-      // Sort notes by created_time if available (oldest first)
-      const sortedNotes = [...notes].sort((a, b) => {
-        if (!a.created_time || !b.created_time) return 0
-        return new Date(a.created_time).getTime() - new Date(b.created_time).getTime()
-      })
-      
-      for (const note of sortedNotes) {
+      for (let i = 0; i < notes.length; i++) {
+        const note = notes[i]
         try {
           const noteRequest: any = { body: note.body }
           
@@ -158,8 +156,13 @@ export async function POST(request: Request) {
             noteRequest.created_time = note.created_time
           }
           
-          console.log(`[Deals API] Creating note: ${note.body.substring(0, 50)}...`)
+          console.log(`[Deals API] Creating note ${i + 1}/${notes.length}: ${note.body.substring(0, 50)}...`)
           await client.createDealNote(deal.id, noteRequest)
+          
+          // Small delay between notes to help maintain order
+          if (i < notes.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 100))
+          }
         } catch (noteErr) {
           console.error(`[Deals API] Failed to create note:`, noteErr)
           // Continue with other notes even if one fails

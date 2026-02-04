@@ -855,12 +855,20 @@ export function MigrationDashboard() {
               processed = processed.replace(/{products\.total}/g, `$${total.toFixed(2)}`)
               
               // Full formatted list
+              // Helper for cycle formatting in merge fields
+              const formatCycleForMerge = (cycle: any): string => {
+                if (!cycle) return 'month'
+                if (typeof cycle === 'string') return cycle.toLowerCase()
+                const cycleMap: Record<number, string> = { 1: 'year', 2: 'month', 3: 'week', 6: 'day' }
+                return cycleMap[cycle] || 'month'
+              }
+              
               const list = products.map((p: any) => {
                 const name = p.ProductName || 'Unknown'
                 const qty = p.Qty || 1
                 const price = p.ProductPrice || 0
                 if (p.subscription?.isSubscription) {
-                  const cycle = p.subscription?.cycle || 'month'
+                  const cycle = formatCycleForMerge(p.subscription?.cycle)
                   return `• ${name}: ${qty}x $${price.toFixed(2)}/${cycle}`
                 }
                 return `• ${name}: ${qty}x $${price.toFixed(2)} = $${(qty * price).toFixed(2)}`
@@ -883,12 +891,33 @@ export function MigrationDashboard() {
           const notes: Array<{ body: string; created_by?: string; created_time?: string }> = []
           
           // Add custom migration note FIRST (if exists)
+          // Use a timestamp slightly BEFORE the opportunity creation date
+          // so if Keap sorts notes by date, this will appear first
           if (customMigrationNote && customMigrationNote.trim()) {
+            let customNoteTime: string
+            if (opp.date_created) {
+              // 1 second before opportunity creation
+              const oppCreated = new Date(opp.date_created)
+              oppCreated.setSeconds(oppCreated.getSeconds() - 1)
+              customNoteTime = oppCreated.toISOString()
+            } else {
+              customNoteTime = new Date().toISOString()
+            }
+            
             notes.push({
               body: processMergeFields(customMigrationNote, opp),
               created_by: opp.user?.id?.toString(),
-              created_time: new Date().toISOString()
+              created_time: customNoteTime
             })
+          }
+          
+          // Helper: Format subscription billing cycle
+          const formatBillingCycle = (cycle: any): string => {
+            if (!cycle) return 'month'
+            if (typeof cycle === 'string') return cycle.toLowerCase()
+            // Handle numeric cycle values: 1=year, 2=month, 3=week, 6=day
+            const cycleMap: Record<number, string> = { 1: 'year', 2: 'month', 3: 'week', 6: 'day' }
+            return cycleMap[cycle] || 'month'
           }
           
           // Add products as formatted note (if mapped or default)
@@ -906,7 +935,7 @@ export function MigrationDashboard() {
               
               // Format subscription products differently
               if (p.subscription?.isSubscription) {
-                const cycle = p.subscription.cycle || 'month'
+                const cycle = formatBillingCycle(p.subscription.cycle)
                 productsBody += `• ${productName} (Subscription)\n`
                 productsBody += `  ${qty}x $${price.toFixed(2)}/${cycle}\n`
               } else {
