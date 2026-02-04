@@ -323,6 +323,7 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, initialPi
           // Handle products array as a single mappable field
           if (value.length > 0) {
             const existing = fieldMap.get('products')
+            const existingSamples = existing?.sampleValues || []
             const productNames = value
               .slice(0, 3)
               .map((p: any) => p.ProductName || `Product #${p.ProductId}`)
@@ -332,7 +333,7 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, initialPi
               path: 'products',
               label: 'Products (Line Items)',
               type: 'PRODUCTS',
-              sample: `${value.length} items: ${sample}`,
+              sampleValues: existingSamples.length < 3 ? [...existingSamples, `${value.length} items: ${sample}`] : existingSamples,
               count: (existing?.count || 0) + 1
             })
           }
@@ -340,11 +341,12 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, initialPi
           // Handle stageMoves object specially - expose outcomeDate as mappable field
           if (value.outcomeDate) {
             const existing = fieldMap.get('stageMoves.outcomeDate')
+            const existingSamples = existing?.sampleValues || []
             fieldMap.set('stageMoves.outcomeDate', {
               path: 'stageMoves.outcomeDate',
               label: 'Stage Moves → Outcome Date',
               type: 'TEXT',
-              sample: value.outcomeDate,
+              sampleValues: existingSamples.length < 3 ? [...existingSamples, value.outcomeDate.substring(0, 50)] : existingSamples,
               count: (existing?.count || 0) + 1
             })
           }
