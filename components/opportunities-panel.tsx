@@ -29,12 +29,23 @@ export interface OpportunityProduct {
   ProductId: number
   Qty: number
   DiscountPercent?: number
+  SubscriptionPlanId?: number
   // Flat fields from enrichment
   ProductName?: string
   ProductPrice?: number
   // Calculated price fields (when distributed from OrderRevenue)
   CalculatedPrice?: number
   OriginalPrice?: number
+  // Subscription info (when ProductId is 0 and SubscriptionPlanId exists)
+  subscription?: {
+    subscriptionPlanId: number
+    planPrice: number
+    cycle: string  // "Week", "Month", "Year", "Day"
+    frequency: number
+    numberOfCycles: number
+    active: boolean
+    isSubscription: boolean
+  }
   // Nested product object from enrichment
   product?: {
     Id: number
@@ -480,17 +491,28 @@ export function OpportunitiesPanel({
                                 {opp.products.map((pi: any, idx) => {
                                   const isCalculated = pi.CalculatedPrice !== undefined
                                   const isUnknown = pi.ProductName === 'Unknown'
+                                  const isSubscription = pi.subscription?.isSubscription
                                   const displayPrice = pi.ProductPrice || pi.product?.ProductPrice || 0
+                                  
+                                  // Format subscription billing cycle
+                                  const billingCycle = isSubscription && pi.subscription?.cycle 
+                                    ? `/${pi.subscription.cycle.toLowerCase()}` 
+                                    : ''
                                   
                                   return (
                                     <div key={idx} className={`flex items-center justify-between gap-2 text-xs ${isUnknown ? 'opacity-50' : ''}`}>
-                                      <div className="flex items-center gap-2">
-                                        <span className={`font-medium ${isUnknown ? 'text-gray-500 italic' : 'text-blue-800'}`}>
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className={`font-medium ${isUnknown ? 'text-gray-500 italic' : isSubscription ? 'text-purple-800' : 'text-blue-800'}`}>
                                           {pi.ProductName || pi.product?.ProductName || `Product #${pi.ProductId}`}
                                         </span>
                                         {pi.Qty > 1 && (
                                           <Badge variant="outline" className="text-[10px] bg-blue-100">
                                             x{pi.Qty}
+                                          </Badge>
+                                        )}
+                                        {isSubscription && (
+                                          <Badge className="text-[9px] h-3.5 bg-purple-500 text-white">
+                                            subscription
                                           </Badge>
                                         )}
                                         {isCalculated && !isUnknown && (
@@ -499,8 +521,8 @@ export function OpportunitiesPanel({
                                           </Badge>
                                         )}
                                       </div>
-                                      <span className={`font-medium ${isCalculated && !isUnknown ? 'text-green-600' : 'text-blue-600'}`}>
-                                        ${displayPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      <span className={`font-medium whitespace-nowrap ${isCalculated && !isUnknown ? 'text-green-600' : isSubscription ? 'text-purple-600' : 'text-blue-600'}`}>
+                                        ${displayPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{billingCycle}
                                       </span>
                                     </div>
                                   )

@@ -90,6 +90,42 @@ export async function POST(request: Request) {
       console.error(`[Enrich API] Product lookup failed:`, err)
     }
     
+    // Step 2b: Fetch ALL subscription plans to build ID -> Details lookup
+    console.log(`[Enrich API] Fetching SubscriptionPlan lookup table...`)
+    const subscriptionPlanMap = new Map<number, { 
+      productId: number
+      planPrice: number
+      cycle: string
+      frequency: number
+      numberOfCycles: number
+      active: boolean
+    }>()
+    try {
+      const subscriptionResult = await client.query(
+        'SubscriptionPlan',
+        1000,
+        0,
+        { Id: '~>~0' },  // All subscription plans
+        ['Id', 'ProductId', 'PlanPrice', 'Cycle', 'Frequency', 'NumberOfCycles', 'Active']
+      )
+      const subscriptionList = Array.isArray(subscriptionResult) ? subscriptionResult : []
+      for (const sub of subscriptionList) {
+        if (sub.Id) {
+          subscriptionPlanMap.set(sub.Id, {
+            productId: sub.ProductId || 0,
+            planPrice: sub.PlanPrice || 0,
+            cycle: sub.Cycle || '',
+            frequency: sub.Frequency || 1,
+            numberOfCycles: sub.NumberOfCycles || 0,
+            active: sub.Active || false
+          })
+        }
+      }
+      console.log(`[Enrich API] Loaded ${subscriptionPlanMap.size} subscription plans`)
+    } catch (err) {
+      console.error(`[Enrich API] SubscriptionPlan lookup failed:`, err)
+    }
+    
     // Results maps - keyed by opportunity ID
     const products: Record<string, any[]> = {}
     const stageMoveData: Record<string, {
@@ -124,30 +160,57 @@ export async function POST(request: Request) {
         console.error(`[Enrich API] Lead/OrderRevenue error for Opp #${numericId}:`, err)
       }
       
-      // Query ProductInterest for this opportunity
+      // Query ProductInterest for this opportunity (include SubscriptionPlanId)
       try {
         const productResult = await client.query(
           'ProductInterest',
           100,
           0,
           { ObjectId: numericId },
-          ['Id', 'ObjectId', 'ProductId', 'Qty', 'DiscountPercent']
+          ['Id', 'ObjectId', 'ProductId', 'Qty', 'DiscountPercent', 'SubscriptionPlanId']
         )
         const productList = Array.isArray(productResult) ? productResult : []
         if (productList.length > 0) {
-          // Enrich with nested product object (matches UI expectations)
+          // Enrich with product/subscription details
           let enrichedProducts = productList.map(pi => {
-            const productDetails = productMap.get(pi.ProductId)
+            let productDetails = productMap.get(pi.ProductId)
+            let subscriptionInfo: any = null
+            
+            // If ProductId is 0 but SubscriptionPlanId exists, look up subscription
+            if ((!pi.ProductId || pi.ProductId === 0) && pi.SubscriptionPlanId) {
+              const subPlan = subscriptionPlanMap.get(pi.SubscriptionPlanId)
+              if (subPlan) {
+                // Get product name from subscription's ProductId
+                const subProductDetails = productMap.get(subPlan.productId)
+                productDetails = subProductDetails || { name: `Subscription Plan #${pi.SubscriptionPlanId}`, price: subPlan.planPrice }
+                
+                // Build subscription info
+                subscriptionInfo = {
+                  subscriptionPlanId: pi.SubscriptionPlanId,
+                  planPrice: subPlan.planPrice,
+                  cycle: subPlan.cycle,
+                  frequency: subPlan.frequency,
+                  numberOfCycles: subPlan.numberOfCycles,
+                  active: subPlan.active,
+                  isSubscription: true
+                }
+                
+                console.log(`[Enrich API] Opp #${numericId}: Found subscription plan ${pi.SubscriptionPlanId} → Product "${productDetails?.name}" @ $${subPlan.planPrice}/${subPlan.cycle}`)
+              }
+            }
+            
             return {
               ...pi,
               // Flat fields for backward compatibility
               ProductName: productDetails?.name || 'Unknown',
-              ProductPrice: productDetails?.price || 0,
+              ProductPrice: subscriptionInfo?.planPrice || productDetails?.price || 0,
+              // Subscription info if applicable
+              subscription: subscriptionInfo,
               // Nested product object for UI
               product: productDetails ? {
-                Id: pi.ProductId,
+                Id: pi.ProductId || subscriptionInfo?.subscriptionPlanId,
                 ProductName: productDetails.name,
-                ProductPrice: productDetails.price
+                ProductPrice: subscriptionInfo?.planPrice || productDetails.price
               } : null
             }
           })
