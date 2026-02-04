@@ -1000,12 +1000,37 @@ export function MigrationDashboard() {
           // Preserve original dates from opportunity (if mapped)
           const dateCreatedMapping = fieldMappingConfig?.mappings?.find(m => m.sourceField === "date_created")
           const lastUpdatedMapping = fieldMappingConfig?.mappings?.find(m => m.sourceField === "last_updated")
+          const outcomeDateMapping = fieldMappingConfig?.mappings?.find(m => m.sourceField === "stageMoves.outcomeDate")
           
           if (dateCreatedMapping?.targetField === "created_time" && opp.date_created) {
             dealData.created_time = opp.date_created
           }
           if (lastUpdatedMapping?.targetField === "last_updated_time" && opp.last_updated) {
             dealData.last_updated_time = opp.last_updated
+          }
+          
+          // Set closed_time (Actual Close Date) from stageMoves.outcomeDate if mapped
+          if (outcomeDateMapping?.targetField === "closed_time") {
+            const stageMoves = (opp as any).stageMoves
+            const outcomeDate = stageMoves?.outcomeDate
+            
+            if (outcomeDate) {
+              // Parse XML-RPC date format (20190423T15:36:28)
+              const match = outcomeDate.match(/^(\d{4})(\d{2})(\d{2})T(\d{2}):(\d{2}):(\d{2})$/)
+              if (match) {
+                const [, year, month, day, hour, min, sec] = match
+                const parsedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(min), parseInt(sec))
+                dealData.closed_time = parsedDate.toISOString()
+                console.log(`[Migration] Actual Close Date: ${outcomeDate} → ${dealData.closed_time}`)
+              } else {
+                // Fallback: try standard date parsing
+                const parsed = new Date(outcomeDate)
+                if (!isNaN(parsed.getTime())) {
+                  dealData.closed_time = parsed.toISOString()
+                  console.log(`[Migration] Actual Close Date (fallback): ${outcomeDate} → ${dealData.closed_time}`)
+                }
+              }
+            }
           }
           
           console.log("[Migration] Creating deal:", dealData.name, "status:", status)
