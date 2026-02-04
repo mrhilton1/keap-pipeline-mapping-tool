@@ -112,6 +112,7 @@ const STANDARD_DEAL_FIELDS: DealField[] = [
 const SPECIAL_DEAL_FIELDS: DealField[] = [
   { name: "value.average", label: "Value (Average)", type: "NUMBER", isCustom: false }, // Averages low & high revenue
   { name: "_deal_notes", label: "Add as Deal Note", type: "LONG_TEXT", isCustom: false },
+  { name: "_products_note", label: "Add Products as Deal Note", type: "PRODUCTS", isCustom: false }, // Products → formatted note
   { name: "_stage_mapping", label: "Smart Stage Mapping", type: "STAGE", isCustom: false },
   { name: "_owner_mapping", label: "⚠️ Assign ALL to Same Owner", type: "USER", isCustom: false },
 ]
@@ -128,6 +129,7 @@ const FIELD_DESCRIPTIONS: Record<string, string> = {
   "created_time": "Preserve original creation date from opportunity",
   "last_updated_time": "Preserve last updated date from opportunity",
   "_deal_notes": "Creates note via /v2/deals/{id}/notes API",
+  "_products_note": "Products formatted as deal note (name, qty, price)",
   "_stage_mapping": "Auto-match stages by name, map unmatched manually",
   "_owner_mapping": "⚠️ OVERRIDE: All deals assigned to ONE selected owner",
 }
@@ -166,7 +168,7 @@ const DEFAULT_MAPPINGS: Record<string, string> = {
   "projected_revenue_high": "value.average",  // Both revenue fields → average
   "projected_revenue_low": "value.average",   // Both revenue fields → average
   "contact.id": "contacts.id",           // Contact ID → Primary Contact
-  "user.id": "owner_id",                 // User ID → Keep Keap Original Owner (default)
+  "user.id": "owner_id",                 // User ID → Keep Original Owner (default)
   "estimated_close_date": "estimated_close_time",
   "stageMoves.outcomeDate": "actual_close_time",  // WON/LOST date → Actual Close Date
   "date_created": "created_time",        // Preserve original creation date
@@ -174,6 +176,7 @@ const DEFAULT_MAPPINGS: Record<string, string> = {
   "stage.name": "_stage_mapping",         // Stage name → Smart Pipeline stage mapping
   "opportunity_notes": "_deal_notes",     // Notes → Deal notes API
   "next_action_notes": "_deal_notes",     // Next action notes → Deal notes API
+  "products": "_products_note",           // Products → formatted deal note
 }
 
 // Exported types for parent state management
@@ -313,6 +316,23 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, initialPi
             const path = `custom_fields[${cf.id}]`
             processValue(path, cf.content, `Custom Field #${cf.id}`)
           })
+        } else if (key === 'products' && Array.isArray(value)) {
+          // Handle products array as a single mappable field
+          if (value.length > 0) {
+            const existing = fieldMap.get('products')
+            const productNames = value
+              .slice(0, 3)
+              .map((p: any) => p.ProductName || `Product #${p.ProductId}`)
+              .join(', ')
+            const sample = value.length > 3 ? `${productNames}...` : productNames
+            fieldMap.set('products', {
+              path: 'products',
+              label: 'Products (Line Items)',
+              type: 'PRODUCTS',
+              sample: `${value.length} items: ${sample}`,
+              count: (existing?.count || 0) + 1
+            })
+          }
         } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
           // Nested object
           processObject(value, `${prefix}${key}.`, `${labelPrefix}${formatLabel(key)} → `)
