@@ -205,17 +205,20 @@ export class KeapXmlRpcClient {
     const limit = 1000
     
     // Fields from actual schema: Id, ObjectId, ProductId, Qty, DiscountPercent
+    // Use Id > 0 filter to get ALL records (empty queryData may not work)
     while (true) {
       const result = await this.query<ProductInterest>(
         'ProductInterest',
         limit,
         page,
-        {}, // No filter - get ALL
+        { Id: '~>~0' }, // Id greater than 0 = ALL records
         ['Id', 'ObjectId', 'ProductId', 'Qty', 'DiscountPercent']
       )
       
       // Handle non-array responses (empty result returns {} not [])
       const batch = Array.isArray(result) ? result : []
+      
+      console.log(`[XML-RPC] ProductInterest page ${page}: ${batch.length} records`)
       
       if (batch.length === 0) break
       allInterests.push(...batch)
@@ -264,17 +267,20 @@ export class KeapXmlRpcClient {
     const limit = 1000
     
     // Fields from actual schema: Id, OpportunityId, MoveDate, MoveToStage, MoveFromStage
+    // Use Id > 0 filter to get ALL records (empty queryData may not work)
     while (true) {
       const result = await this.query<StageMove>(
         'StageMove',
         limit,
         page,
-        {},
+        { Id: '~>~0' }, // Id greater than 0 = ALL records
         ['Id', 'OpportunityId', 'MoveDate', 'MoveToStage', 'MoveFromStage', 'UserId']
       )
       
       // Handle non-array responses (empty result returns {} not [])
       const batch = Array.isArray(result) ? result : []
+      
+      console.log(`[XML-RPC] StageMove page ${page}: ${batch.length} records`)
       
       if (batch.length === 0) break
       allMoves.push(...batch)

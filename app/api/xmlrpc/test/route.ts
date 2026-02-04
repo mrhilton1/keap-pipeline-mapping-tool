@@ -41,20 +41,21 @@ export async function GET() {
 
     // Test 1: ProductInterest with CORRECT fields
     // ObjectId links to Opportunity Id (not OpportunityId field!)
+    // Use Id > 0 filter to ensure we get ALL records (not just recent)
     console.log('[XML-RPC Test] Testing ProductInterest table...')
     try {
       const result = await client.query(
         'ProductInterest',
         5,
         0,
-        {},
+        { Id: '~>~0' }, // Id > 0 = ALL records from all time
         ['Id', 'ObjectId', 'ProductId', 'Qty', 'DiscountPercent']
       )
       // Handle non-array responses (empty result may return {} not [])
       const productInterests = Array.isArray(result) ? result : []
       results.productInterest = {
         success: true,
-        error: productInterests.length === 0 ? "No records (table may be empty)" : "",
+        error: productInterests.length === 0 ? "No records found" : "",
         count: productInterests.length,
         sample: productInterests[0] || null
       }
@@ -70,14 +71,14 @@ export async function GET() {
         'StageMove',
         5,
         0,
-        {},
+        { Id: '~>~0' }, // Id > 0 = ALL records from all time
         ['Id', 'OpportunityId', 'MoveDate', 'MoveToStage', 'MoveFromStage']
       )
       // Handle non-array responses
       const stageMoves = Array.isArray(result) ? result : []
       results.stageMove = {
         success: true,
-        error: stageMoves.length === 0 ? "No records (table may be empty)" : "",
+        error: stageMoves.length === 0 ? "No records found" : "",
         count: stageMoves.length,
         sample: stageMoves[0] || null
       }
@@ -92,14 +93,14 @@ export async function GET() {
         'Product',
         5,
         0,
-        {},
+        { Id: '~>~0' }, // Id > 0 = ALL records from all time
         ['Id', 'ProductName', 'ProductPrice', 'Sku', 'Status']
       )
       // Handle non-array responses
       const products = Array.isArray(result) ? result : []
       results.product = {
         success: true,
-        error: products.length === 0 ? "No records (table may be empty)" : "",
+        error: products.length === 0 ? "No records found" : "",
         count: products.length,
         sample: products[0] || null
       }
