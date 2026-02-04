@@ -194,6 +194,21 @@ export class KeapXmlRpcClient {
   }
 
   /**
+   * Find records by matching a specific field value
+   * Uses DataService.findByField - simpler than query()
+   */
+  async findByField<T>(
+    table: string,
+    limit: number,
+    page: number,
+    fieldName: string,
+    fieldValue: string | number,
+    returnFields: string[]
+  ): Promise<T[]> {
+    return this.call('DataService.findByField', [table, limit, page, fieldName, fieldValue, returnFields])
+  }
+
+  /**
    * Get ALL ProductInterest records
    * Uses ObjectId field which links to Opportunity Id
    */

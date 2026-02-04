@@ -39,23 +39,22 @@ export async function GET() {
 
     const client = new KeapXmlRpcClient(accessToken)
 
-    // Test 1: ProductInterest with CORRECT fields
-    // ObjectId links to Opportunity Id (not OpportunityId field!)
-    // Use Id > 0 filter to ensure we get ALL records (not just recent)
-    console.log('[XML-RPC Test] Testing ProductInterest table...')
+    // Test 1: ProductInterest - use findByField with known Opportunity ID 2
+    // ObjectId links to Opportunity Id
+    console.log('[XML-RPC Test] Testing ProductInterest.findByField(ObjectId=2)...')
     try {
-      const result = await client.query(
+      const result = await client.findByField(
         'ProductInterest',
-        5,
+        100,
         0,
-        { Id: '~>~0' }, // Id > 0 = ALL records from all time
+        'ObjectId',  // Field to search
+        2,           // Known Opportunity ID
         ['Id', 'ObjectId', 'ProductId', 'Qty', 'DiscountPercent']
       )
-      // Handle non-array responses (empty result may return {} not [])
       const productInterests = Array.isArray(result) ? result : []
       results.productInterest = {
         success: true,
-        error: productInterests.length === 0 ? "No records found" : "",
+        error: productInterests.length === 0 ? "No products for Opp #2" : "",
         count: productInterests.length,
         sample: productInterests[0] || null
       }
@@ -63,22 +62,21 @@ export async function GET() {
       results.productInterest = { success: false, error: err.message || String(err), count: 0 }
     }
 
-    // Test 2: StageMove with CORRECT fields
-    // MoveToStage and MoveFromStage are IDs (not Stage name!)
-    console.log('[XML-RPC Test] Testing StageMove table...')
+    // Test 2: StageMove - use findByField with known Opportunity ID 2
+    console.log('[XML-RPC Test] Testing StageMove.findByField(OpportunityId=2)...')
     try {
-      const result = await client.query(
+      const result = await client.findByField(
         'StageMove',
-        5,
+        100,
         0,
-        { Id: '~>~0' }, // Id > 0 = ALL records from all time
+        'OpportunityId',  // Field to search
+        2,                // Known Opportunity ID
         ['Id', 'OpportunityId', 'MoveDate', 'MoveToStage', 'MoveFromStage']
       )
-      // Handle non-array responses
       const stageMoves = Array.isArray(result) ? result : []
       results.stageMove = {
         success: true,
-        error: stageMoves.length === 0 ? "No records found" : "",
+        error: stageMoves.length === 0 ? "No stage moves for Opp #2" : "",
         count: stageMoves.length,
         sample: stageMoves[0] || null
       }
@@ -86,21 +84,20 @@ export async function GET() {
       results.stageMove = { success: false, error: err.message || String(err), count: 0 }
     }
 
-    // Test 3: Product table
+    // Test 3: Product table - get any products
     console.log('[XML-RPC Test] Testing Product table...')
     try {
       const result = await client.query(
         'Product',
         5,
         0,
-        { Id: '~>~0' }, // Id > 0 = ALL records from all time
+        { Id: '~>~0' },
         ['Id', 'ProductName', 'ProductPrice', 'Sku', 'Status']
       )
-      // Handle non-array responses
       const products = Array.isArray(result) ? result : []
       results.product = {
         success: true,
-        error: products.length === 0 ? "No records found" : "",
+        error: products.length === 0 ? "No products found" : "",
         count: products.length,
         sample: products[0] || null
       }
