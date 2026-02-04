@@ -4,8 +4,14 @@ import { KeapXmlRpcClient } from "@/lib/keap-xmlrpc"
 
 /**
  * Batch endpoint to enrich opportunities with:
- * - Products (from ProductInterest table)
- * - Stage moves (from StageMove table) - for WON/LOST date tracking
+ * - Products (from ProductInterest + Product tables)
+ * - Stage moves (from StageMove table) - for last updated and WON/LOST date tracking
+ * 
+ * New approach:
+ * 1. Pull ALL ProductInterest records, filter by OpportunityId != null
+ * 2. Look up Product table for name/price
+ * 3. Pull ALL StageMove records
+ * 4. Analyze for MAX date (last updated) and any WON/LOST moves
  * 
  * POST body: { opportunityIds: number[] }
  */
@@ -21,7 +27,6 @@ export async function POST(request: Request) {
       }, { status: 400 })
     }
 
-    // Use OAuth access token (same as REST API)
     const cookieStore = await cookies()
     const accessToken = cookieStore.get("keap_access_token")
 
@@ -36,31 +41,52 @@ export async function POST(request: Request) {
     console.log(`[Enrich API] Enriching ${opportunityIds.length} opportunities`)
     
     const client = new KeapXmlRpcClient(accessToken.value)
+    const oppIdSet = new Set(opportunityIds.map(id => Number(id)))
     
-    // Batch fetch products and stage moves
-    const [productsMap, stageMovesMap] = await Promise.all([
-      client.batchGetOpportunityProducts(opportunityIds.map(id => Number(id))),
-      client.batchGetStageMoves(opportunityIds.map(id => Number(id)))
+    // Fetch ALL data first, then filter to requested IDs
+    const [productMap, stageMoveMap] = await Promise.all([
+      client.buildOpportunityProductMap(),
+      client.buildOpportunityStageMoveMap()
     ])
 
-    // Convert Maps to objects for JSON serialization
+    // Filter to only requested opportunity IDs
     const products: Record<string, any[]> = {}
-    productsMap.forEach((value, key) => {
-      products[String(key)] = value
-    })
+    const stageMoves: Record<string, {
+      moves: any[]
+      lastUpdated: string | null
+      outcomeDate: string | null
+      outcome: 'WON' | 'LOST' | null
+    }> = {}
 
-    const stageMoves: Record<string, any[]> = {}
-    stageMovesMap.forEach((value, key) => {
-      stageMoves[String(key)] = value
-    })
+    for (const oppId of oppIdSet) {
+      // Products
+      const oppProducts = productMap.get(oppId)
+      if (oppProducts && oppProducts.length > 0) {
+        products[String(oppId)] = oppProducts
+      }
 
+      // Stage moves with analysis
+      const oppStageMoves = stageMoveMap.get(oppId)
+      if (oppStageMoves) {
+        stageMoves[String(oppId)] = oppStageMoves
+      }
+    }
+
+    const productsFound = Object.keys(products).length
+    const stageMovesFound = Object.keys(stageMoves).length
+    
     console.log(`[Enrich API] Enriched ${opportunityIds.length} opportunities`)
-    console.log(`[Enrich API] Products found for ${Object.keys(products).filter(k => products[k].length > 0).length} opportunities`)
-    console.log(`[Enrich API] Stage moves found for ${Object.keys(stageMoves).filter(k => stageMoves[k].length > 0).length} opportunities`)
+    console.log(`[Enrich API] Products found for ${productsFound} opportunities`)
+    console.log(`[Enrich API] Stage moves found for ${stageMovesFound} opportunities`)
 
     return NextResponse.json({ 
       products,
-      stageMoves
+      stageMoves,
+      summary: {
+        requested: opportunityIds.length,
+        productsFound,
+        stageMovesFound
+      }
     })
   } catch (error) {
     console.error("[Enrich API] Error:", error)

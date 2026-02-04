@@ -80,11 +80,17 @@ export interface Opportunity {
   }>
   // XML-RPC enrichment data
   products?: OpportunityProduct[]
-  stageMoves?: Array<{
-    Id: number
-    OpportunityId: number
-    MoveDate: string
-  }>
+  stageMoves?: {
+    moves: Array<{
+      Id: number
+      OpportunityId: number
+      MoveDate: string
+      Stage?: string
+    }>
+    lastUpdated: string | null
+    outcomeDate: string | null
+    outcome: 'WON' | 'LOST' | null
+  }
 }
 
 interface OpportunitiesPanelProps {
@@ -464,24 +470,25 @@ export function OpportunitiesPanel({
                           )}
                           
                           {/* Stage Moves (from XML-RPC StageMove table) */}
-                          {opp.stageMoves && opp.stageMoves.length > 0 && (
+                          {opp.stageMoves && opp.stageMoves.moves?.length > 0 && (
                             <div className="mt-2 p-2 rounded border bg-purple-50 border-purple-200">
                               <div className="flex items-center gap-2 text-xs text-purple-700">
                                 <Trophy className="w-3 h-3" />
                                 <span className="font-medium">
-                                  {opp.stageMoves.length} stage move(s)
+                                  {opp.stageMoves.moves.length} stage move(s)
                                 </span>
+                                {opp.stageMoves.outcome && (
+                                  <Badge variant={opp.stageMoves.outcome === 'WON' ? 'default' : 'destructive'} className="text-[10px] h-4">
+                                    {opp.stageMoves.outcome}
+                                  </Badge>
+                                )}
                               </div>
-                              <div className="mt-1 space-y-0.5">
-                                {opp.stageMoves.slice(-3).map((move, idx) => (
-                                  <div key={idx} className="text-[10px] text-purple-600">
-                                    {new Date(move.MoveDate).toLocaleDateString()}
-                                  </div>
-                                ))}
-                                {opp.stageMoves.length > 3 && (
-                                  <div className="text-[10px] text-purple-500 italic">
-                                    +{opp.stageMoves.length - 3} more...
-                                  </div>
+                              <div className="mt-1 space-y-0.5 text-[10px] text-purple-600">
+                                {opp.stageMoves.lastUpdated && (
+                                  <div>Last: {new Date(opp.stageMoves.lastUpdated).toLocaleDateString()}</div>
+                                )}
+                                {opp.stageMoves.outcomeDate && (
+                                  <div>{opp.stageMoves.outcome} on: {new Date(opp.stageMoves.outcomeDate).toLocaleDateString()}</div>
                                 )}
                               </div>
                             </div>

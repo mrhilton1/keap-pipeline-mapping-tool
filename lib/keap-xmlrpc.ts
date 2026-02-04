@@ -4,8 +4,8 @@
  * Uses the same OAuth access token as REST API - no separate API key needed!
  * 
  * Used for accessing legacy tables not available in REST API:
- * - Lead (ProductInterest) - links opportunities to products
- * - Product - product details
+ * - ProductInterest - links opportunities to products
+ * - Product - product details (name, price)
  * - StageMove - stage transition history
  * 
  * Documentation: https://developer.infusionsoft.com/docs/table-schema/
@@ -58,13 +58,6 @@ function buildMethodCall(method: string, params: any[]): string {
 
 // Parse XML-RPC response
 function parseResponse(xml: string): any {
-  // Simple XML parser for XML-RPC responses
-  const getTagContent = (xml: string, tag: string): string | null => {
-    const regex = new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, 'i')
-    const match = xml.match(regex)
-    return match ? match[1] : null
-  }
-
   const parseValue = (valueXml: string): any => {
     // Check for different value types
     const stringMatch = valueXml.match(/<string>([^<]*)<\/string>/i)
@@ -129,45 +122,37 @@ function parseResponse(xml: string): any {
   throw new Error('Invalid XML-RPC response')
 }
 
+// Interfaces based on Keap table schema
 export interface ProductInterest {
   Id: number
-  ObjectId: number  // Links to opportunity or order
+  OpportunityId?: number
   ProductId: number
 }
 
 export interface Product {
   Id: number
   ProductName: string
-  ProductPrice: number
-  ProductDesc?: string
-  Sku?: string
-  ShortDescription?: string
-  Status?: number
+  ProductPrice?: number
 }
 
 export interface StageMove {
   Id: number
   OpportunityId: number
   MoveDate: string
+  Stage?: string  // Stage name (text field)
 }
 
 export class KeapXmlRpcClient {
   private accessToken: string
   private endpoint: string
 
-  /**
-   * Create XML-RPC client using OAuth access token
-   * Token is passed in Authorization header, not as method parameter
-   */
   constructor(accessToken: string) {
     this.accessToken = accessToken
-    // XML-RPC endpoint for OAuth
     this.endpoint = 'https://api.infusionsoft.com/crm/xmlrpc/v1'
   }
 
   private async call(method: string, params: any[]): Promise<any> {
-    // With OAuth, token goes in Authorization header (not as first param)
-    // First param should be the "private key" which is empty string for OAuth
+    // With OAuth, first param is empty string, token goes in header
     const fullParams = ['', ...params]
     const body = buildMethodCall(method, fullParams)
 
@@ -199,11 +184,6 @@ export class KeapXmlRpcClient {
 
   /**
    * Query a table using DataService.query
-   * @param table - Table name (e.g., 'Lead', 'Product', 'StageMove')
-   * @param limit - Max records to return (max 1000)
-   * @param page - Page number (0-indexed)
-   * @param queryData - Field criteria (e.g., { OpportunityId: 123 })
-   * @param selectedFields - Fields to return
    */
   async query<T>(
     table: string,
@@ -216,151 +196,291 @@ export class KeapXmlRpcClient {
   }
 
   /**
-   * Get products linked to an opportunity via the ProductInterest table
-   * Note: ProductInterest links to opportunities via ObjectId (when ObjType='Opportunity')
+   * Get ALL ProductInterest records, then filter for those with OpportunityId
+   * This approach avoids field existence issues by getting all records first
    */
-  async getOpportunityProducts(opportunityId: number): Promise<Array<ProductInterest & { product?: Product }>> {
-    console.log(`[XML-RPC] Getting products for opportunity ${opportunityId}`)
+  async getAllProductInterests(): Promise<ProductInterest[]> {
+    console.log('[XML-RPC] Fetching ALL ProductInterest records')
     
-    // Query ProductInterest table - links to opportunities via ObjectId
-    // Only query fields that actually exist in the table
-    const productInterests = await this.query<ProductInterest>(
-      'ProductInterest',
-      100,
-      0,
-      { ObjectId: opportunityId },
-      ['Id', 'ObjectId', 'ProductId']  // Minimal fields that exist
-    )
-
-    if (productInterests.length === 0) {
-      return []
-    }
-
-    // Get unique product IDs
-    const productIds = [...new Set(productInterests.map(pi => pi.ProductId))]
+    const allInterests: ProductInterest[] = []
+    let page = 0
+    const limit = 1000
     
-    // Fetch product details
-    const products: Product[] = []
-    for (const productId of productIds) {
-      try {
-        const productResults = await this.query<Product>(
-          'Product',
-          1,
-          0,
-          { Id: productId },
-          ['Id', 'ProductName', 'ProductPrice', 'ProductDesc', 'Sku', 'ShortDescription', 'Status']
+    try {
+      // Query with just Id and ProductId (these definitely exist)
+      // Then fetch OpportunityId separately or accept whatever fields come back
+      while (true) {
+        const batch = await this.query<ProductInterest>(
+          'ProductInterest',
+          limit,
+          page,
+          {}, // No filter - get ALL
+          ['Id', 'ProductId', 'OpportunityId'] // Try these fields
         )
-        if (productResults.length > 0) {
-          products.push(productResults[0])
+        
+        if (batch.length === 0) break
+        allInterests.push(...batch)
+        
+        if (batch.length < limit) break // Last page
+        page++
+      }
+    } catch (err: any) {
+      // If OpportunityId doesn't work, try without it
+      if (err.message?.includes('OpportunityId')) {
+        console.log('[XML-RPC] OpportunityId field not available, trying ObjectId...')
+        page = 0
+        while (true) {
+          const batch = await this.query<any>(
+            'ProductInterest',
+            limit,
+            page,
+            {},
+            ['Id', 'ProductId', 'ObjectId']
+          )
+          
+          if (batch.length === 0) break
+          // Map ObjectId to OpportunityId for consistency
+          allInterests.push(...batch.map((b: any) => ({
+            Id: b.Id,
+            ProductId: b.ProductId,
+            OpportunityId: b.ObjectId
+          })))
+          
+          if (batch.length < limit) break
+          page++
         }
-      } catch (err) {
-        console.error(`[XML-RPC] Failed to fetch product ${productId}:`, err)
+      } else {
+        throw err
       }
     }
-
-    // Merge product info into product interests
-    const productMap = new Map(products.map(p => [p.Id, p]))
-    return productInterests.map(pi => ({
-      ...pi,
-      product: productMap.get(pi.ProductId)
-    }))
+    
+    console.log(`[XML-RPC] Found ${allInterests.length} total ProductInterest records`)
+    
+    // Filter to only those with an OpportunityId
+    const withOppId = allInterests.filter(pi => pi.OpportunityId != null && pi.OpportunityId > 0)
+    console.log(`[XML-RPC] ${withOppId.length} have OpportunityId`)
+    
+    return withOppId
   }
 
   /**
-   * Get stage moves for an opportunity
+   * Get Product details by ID
+   */
+  async getProduct(productId: number): Promise<Product | null> {
+    try {
+      const results = await this.query<Product>(
+        'Product',
+        1,
+        0,
+        { Id: productId },
+        ['Id', 'ProductName', 'ProductPrice']
+      )
+      return results.length > 0 ? results[0] : null
+    } catch (err) {
+      console.error(`[XML-RPC] Failed to fetch product ${productId}:`, err)
+      return null
+    }
+  }
+
+  /**
+   * Get ALL StageMove records for a specific opportunity
    */
   async getOpportunityStageMoves(opportunityId: number): Promise<StageMove[]> {
     console.log(`[XML-RPC] Getting stage moves for opportunity ${opportunityId}`)
     
-    // Only query fields that actually exist in the table
-    return this.query<StageMove>(
-      'StageMove',
-      100,
-      0,
-      { OpportunityId: opportunityId },
-      ['Id', 'OpportunityId', 'MoveDate']  // Minimal fields that exist
-    )
+    try {
+      // Try with Stage field first
+      return await this.query<StageMove>(
+        'StageMove',
+        100,
+        0,
+        { OpportunityId: opportunityId },
+        ['Id', 'OpportunityId', 'MoveDate', 'Stage']
+      )
+    } catch (err: any) {
+      // If Stage doesn't exist, try without it
+      if (err.message?.includes('Stage')) {
+        console.log('[XML-RPC] Stage field not available, querying without it')
+        return await this.query<StageMove>(
+          'StageMove',
+          100,
+          0,
+          { OpportunityId: opportunityId },
+          ['Id', 'OpportunityId', 'MoveDate']
+        )
+      }
+      throw err
+    }
   }
 
   /**
-   * Get the WON or LOST date for an opportunity (if any)
-   * Note: Requires stage ID -> name mapping from the pipeline stages
-   * @param stageIdToName - Map of stage IDs to stage names (from REST API)
+   * Get ALL StageMove records (for batch analysis)
    */
-  async getOpportunityOutcomeDate(
-    opportunityId: number, 
-    stageIdToName?: Map<number, string>
-  ): Promise<{ date: string; outcome: 'WON' | 'LOST'; stageId: number } | null> {
-    const stageMoves = await this.getOpportunityStageMoves(opportunityId)
+  async getAllStageMoves(): Promise<StageMove[]> {
+    console.log('[XML-RPC] Fetching ALL StageMove records')
     
-    // If no stage mapping provided, just return the most recent stage move with a potential outcome
-    // (We check if stageId is in a "won/lost" looking stage via the caller)
-    for (const move of stageMoves) {
-      if (stageIdToName && stageIdToName.has(move.StageId)) {
-        const stageName = stageIdToName.get(move.StageId)!.toUpperCase()
-        if (stageName.includes('WON') || stageName.includes('CLOSED WON')) {
-          return { date: move.MoveDate, outcome: 'WON', stageId: move.StageId }
+    const allMoves: StageMove[] = []
+    let page = 0
+    const limit = 1000
+    
+    try {
+      while (true) {
+        const batch = await this.query<StageMove>(
+          'StageMove',
+          limit,
+          page,
+          {},
+          ['Id', 'OpportunityId', 'MoveDate', 'Stage']
+        )
+        
+        if (batch.length === 0) break
+        allMoves.push(...batch)
+        
+        if (batch.length < limit) break
+        page++
+      }
+    } catch (err: any) {
+      // If Stage doesn't exist, try without it
+      if (err.message?.includes('Stage')) {
+        console.log('[XML-RPC] Stage field not available, querying without it')
+        page = 0
+        while (true) {
+          const batch = await this.query<StageMove>(
+            'StageMove',
+            limit,
+            page,
+            {},
+            ['Id', 'OpportunityId', 'MoveDate']
+          )
+          
+          if (batch.length === 0) break
+          allMoves.push(...batch)
+          
+          if (batch.length < limit) break
+          page++
         }
-        if (stageName.includes('LOST') || stageName.includes('CLOSED LOST')) {
-          return { date: move.MoveDate, outcome: 'LOST', stageId: move.StageId }
-        }
+      } else {
+        throw err
       }
     }
     
-    // Return latest stage move if we have them (caller can determine outcome)
-    if (stageMoves.length > 0) {
-      const latestMove = stageMoves[stageMoves.length - 1]
-      return { date: latestMove.MoveDate, outcome: 'WON', stageId: latestMove.StageId } // Caller should verify
-    }
-    
-    return null
+    console.log(`[XML-RPC] Found ${allMoves.length} total StageMove records`)
+    return allMoves
   }
 
   /**
-   * Batch fetch products for multiple opportunities
+   * Analyze stage moves to find:
+   * - MAX date (last updated) per opportunity
+   * - WON/LOST date (if stage name contains WON or LOST)
    */
-  async batchGetOpportunityProducts(opportunityIds: number[]): Promise<Map<number, Array<ProductInterest & { product?: Product }>>> {
-    const results = new Map<number, Array<ProductInterest & { product?: Product }>>()
-    
-    // Process in batches to avoid overwhelming the API
-    const batchSize = 10
-    for (let i = 0; i < opportunityIds.length; i += batchSize) {
-      const batch = opportunityIds.slice(i, i + batchSize)
-      await Promise.all(batch.map(async (oppId) => {
-        try {
-          const products = await this.getOpportunityProducts(oppId)
-          results.set(oppId, products)
-        } catch (err) {
-          console.error(`[XML-RPC] Failed to get products for opportunity ${oppId}:`, err)
-          results.set(oppId, [])
-        }
-      }))
+  getOutcomeFromStageMoves(moves: StageMove[]): {
+    lastUpdated: string | null
+    outcomeDate: string | null
+    outcome: 'WON' | 'LOST' | null
+  } {
+    if (moves.length === 0) {
+      return { lastUpdated: null, outcomeDate: null, outcome: null }
     }
-    
-    return results
+
+    // Find MAX date (most recent move)
+    const sortedByDate = [...moves].sort((a, b) => 
+      new Date(b.MoveDate).getTime() - new Date(a.MoveDate).getTime()
+    )
+    const lastUpdated = sortedByDate[0]?.MoveDate || null
+
+    // Find WON or LOST move
+    let outcomeDate: string | null = null
+    let outcome: 'WON' | 'LOST' | null = null
+
+    for (const move of sortedByDate) {
+      if (move.Stage) {
+        const stageName = move.Stage.toUpperCase()
+        if (stageName.includes('WON') || stageName.includes('CLOSED WON')) {
+          outcomeDate = move.MoveDate
+          outcome = 'WON'
+          break
+        }
+        if (stageName.includes('LOST') || stageName.includes('CLOSED LOST')) {
+          outcomeDate = move.MoveDate
+          outcome = 'LOST'
+          break
+        }
+      }
+    }
+
+    return { lastUpdated, outcomeDate, outcome }
   }
 
   /**
-   * Batch fetch stage moves for multiple opportunities
-   * Returns raw stage moves - caller can map stage IDs to names
+   * Build a map of OpportunityId -> Products with full product details
    */
-  async batchGetStageMoves(opportunityIds: number[]): Promise<Map<number, StageMove[]>> {
-    const results = new Map<number, StageMove[]>()
+  async buildOpportunityProductMap(): Promise<Map<number, Array<ProductInterest & { product: Product | null }>>> {
+    const productInterests = await this.getAllProductInterests()
     
-    const batchSize = 10
-    for (let i = 0; i < opportunityIds.length; i += batchSize) {
-      const batch = opportunityIds.slice(i, i + batchSize)
-      await Promise.all(batch.map(async (oppId) => {
-        try {
-          const moves = await this.getOpportunityStageMoves(oppId)
-          results.set(oppId, moves)
-        } catch (err) {
-          console.error(`[XML-RPC] Failed to get stage moves for opportunity ${oppId}:`, err)
-          results.set(oppId, [])
-        }
-      }))
+    // Get unique product IDs
+    const productIds = [...new Set(productInterests.map(pi => pi.ProductId))]
+    console.log(`[XML-RPC] Fetching details for ${productIds.length} unique products`)
+    
+    // Fetch all product details
+    const productMap = new Map<number, Product>()
+    for (const productId of productIds) {
+      const product = await this.getProduct(productId)
+      if (product) {
+        productMap.set(productId, product)
+      }
     }
     
-    return results
+    // Build result map grouped by OpportunityId
+    const result = new Map<number, Array<ProductInterest & { product: Product | null }>>()
+    
+    for (const pi of productInterests) {
+      if (!pi.OpportunityId) continue
+      
+      const oppProducts = result.get(pi.OpportunityId) || []
+      oppProducts.push({
+        ...pi,
+        product: productMap.get(pi.ProductId) || null
+      })
+      result.set(pi.OpportunityId, oppProducts)
+    }
+    
+    console.log(`[XML-RPC] Built product map for ${result.size} opportunities`)
+    return result
+  }
+
+  /**
+   * Build a map of OpportunityId -> Stage move analysis
+   */
+  async buildOpportunityStageMoveMap(): Promise<Map<number, {
+    moves: StageMove[]
+    lastUpdated: string | null
+    outcomeDate: string | null
+    outcome: 'WON' | 'LOST' | null
+  }>> {
+    const allMoves = await this.getAllStageMoves()
+    
+    // Group by OpportunityId
+    const grouped = new Map<number, StageMove[]>()
+    for (const move of allMoves) {
+      const moves = grouped.get(move.OpportunityId) || []
+      moves.push(move)
+      grouped.set(move.OpportunityId, moves)
+    }
+    
+    // Analyze each group
+    const result = new Map<number, {
+      moves: StageMove[]
+      lastUpdated: string | null
+      outcomeDate: string | null
+      outcome: 'WON' | 'LOST' | null
+    }>()
+    
+    for (const [oppId, moves] of grouped.entries()) {
+      const analysis = this.getOutcomeFromStageMoves(moves)
+      result.set(oppId, { moves, ...analysis })
+    }
+    
+    console.log(`[XML-RPC] Built stage move map for ${result.size} opportunities`)
+    return result
   }
 }
