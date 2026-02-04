@@ -132,12 +132,7 @@ function parseResponse(xml: string): any {
 export interface ProductInterest {
   Id: number
   ObjectId: number  // Links to opportunity or order
-  ObjType?: string  // 'Opportunity' or 'Order'
   ProductId: number
-  Qty: number
-  Price: number
-  Discount?: number
-  Notes?: string
 }
 
 export interface Product {
@@ -154,9 +149,6 @@ export interface StageMove {
   Id: number
   OpportunityId: number
   MoveDate: string
-  StageId: number  // Stage ID it moved TO
-  PrevStageId?: number
-  UserId?: number
 }
 
 export class KeapXmlRpcClient {
@@ -231,13 +223,13 @@ export class KeapXmlRpcClient {
     console.log(`[XML-RPC] Getting products for opportunity ${opportunityId}`)
     
     // Query ProductInterest table - links to opportunities via ObjectId
-    // ObjType can be 'Opportunity' or 'Order' - we want Opportunity
+    // Only query fields that actually exist in the table
     const productInterests = await this.query<ProductInterest>(
       'ProductInterest',
       100,
       0,
       { ObjectId: opportunityId },
-      ['Id', 'ObjectId', 'ProductId', 'Qty', 'Price', 'Discount', 'Notes', 'ObjType']
+      ['Id', 'ObjectId', 'ProductId']  // Minimal fields that exist
     )
 
     if (productInterests.length === 0) {
@@ -280,12 +272,13 @@ export class KeapXmlRpcClient {
   async getOpportunityStageMoves(opportunityId: number): Promise<StageMove[]> {
     console.log(`[XML-RPC] Getting stage moves for opportunity ${opportunityId}`)
     
+    // Only query fields that actually exist in the table
     return this.query<StageMove>(
       'StageMove',
       100,
       0,
       { OpportunityId: opportunityId },
-      ['Id', 'OpportunityId', 'MoveDate', 'StageId', 'PrevStageId', 'UserId']
+      ['Id', 'OpportunityId', 'MoveDate']  // Minimal fields that exist
     )
   }
 

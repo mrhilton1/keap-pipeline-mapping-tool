@@ -49,7 +49,7 @@ export async function GET() {
         5,
         0,
         {},
-        ['Id', 'OpportunityId', 'MoveDate', 'StageId']
+        ['Id', 'OpportunityId', 'MoveDate']  // Only fields that exist
       )
       stageMoveTest = { success: true, error: "", count: Array.isArray(stageMoves) ? stageMoves.length : 0 }
     } catch (err) {
@@ -57,7 +57,8 @@ export async function GET() {
     }
 
     const duration = Date.now() - startTime
-    const overallSuccess = productsTest.success || stageMoveTest.success
+    // BOTH tests must pass for overall success
+    const overallSuccess = productsTest.success && stageMoveTest.success
 
     console.log(`[XML-RPC Test] Products: ${productsTest.success ? '✓' : '✗'}, StageMoves: ${stageMoveTest.success ? '✓' : '✗'}, Duration: ${duration}ms`)
 

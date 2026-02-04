@@ -84,9 +84,6 @@ export interface Opportunity {
     Id: number
     OpportunityId: number
     MoveDate: string
-    StageId: number
-    PrevStageId?: number
-    UserId?: number
   }>
 }
 
@@ -478,7 +475,7 @@ export function OpportunitiesPanel({
                               <div className="mt-1 space-y-0.5">
                                 {opp.stageMoves.slice(-3).map((move, idx) => (
                                   <div key={idx} className="text-[10px] text-purple-600">
-                                    Stage #{move.StageId} on {new Date(move.MoveDate).toLocaleDateString()}
+                                    {new Date(move.MoveDate).toLocaleDateString()}
                                   </div>
                                 ))}
                                 {opp.stageMoves.length > 3 && (
