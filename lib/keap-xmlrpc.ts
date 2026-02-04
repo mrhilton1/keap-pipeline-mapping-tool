@@ -10,6 +10,8 @@
  * StageMove - stage transition history (MoveToStage, MoveFromStage are IDs)
  */
 
+import { XMLParser } from "fast-xml-parser"
+
 // XML-RPC method call builder
 function buildMethodCall(method: string, params: any[]): string {
   const serializeValue = (value: any): string => {
@@ -54,64 +56,95 @@ function buildMethodCall(method: string, params: any[]): string {
 </methodCall>`
 }
 
-// Parse XML-RPC response
+// Extract value from XML-RPC value structure (using fast-xml-parser output)
+function extractValue(value: any): any {
+  if (value === null || value === undefined) return null
+  
+  // Handle different XML-RPC types
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return value
+  }
+  
+  // String
+  if (value.string !== undefined) return String(value.string)
+  
+  // Integer
+  if (value.int !== undefined) return parseInt(value.int, 10)
+  if (value.i4 !== undefined) return parseInt(value.i4, 10)
+  
+  // Double
+  if (value.double !== undefined) return parseFloat(value.double)
+  
+  // Boolean  
+  if (value.boolean !== undefined) return value.boolean === 1 || value.boolean === '1'
+  
+  // DateTime
+  if (value['dateTime.iso8601'] !== undefined) return value['dateTime.iso8601']
+  
+  // Nil
+  if (value.nil !== undefined) return null
+  
+  // Array
+  if (value.array) {
+    const data = value.array.data
+    if (!data || !data.value) return []
+    const values = Array.isArray(data.value) ? data.value : [data.value]
+    return values.map(extractValue)
+  }
+  
+  // Struct
+  if (value.struct) {
+    const obj: Record<string, any> = {}
+    const members = value.struct.member
+    if (!members) return obj
+    const memberArray = Array.isArray(members) ? members : [members]
+    for (const member of memberArray) {
+      if (member.name && member.value !== undefined) {
+        obj[member.name] = extractValue(member.value)
+      }
+    }
+    return obj
+  }
+  
+  // If value has a direct text content
+  if (typeof value === 'object' && Object.keys(value).length === 0) {
+    return ''
+  }
+  
+  return value
+}
+
+// Parse XML-RPC response using fast-xml-parser
 function parseResponse(xml: string): any {
-  const parseValue = (valueXml: string): any => {
-    const stringMatch = valueXml.match(/<string>([^<]*)<\/string>/i)
-    if (stringMatch) return stringMatch[1]
+  const parser = new XMLParser({
+    ignoreAttributes: false,
+    parseTagValue: true,
+    trimValues: true,
+  })
 
-    const intMatch = valueXml.match(/<(?:int|i4)>([^<]*)<\/(?:int|i4)>/i)
-    if (intMatch) return parseInt(intMatch[1], 10)
-
-    const doubleMatch = valueXml.match(/<double>([^<]*)<\/double>/i)
-    if (doubleMatch) return parseFloat(doubleMatch[1])
-
-    const boolMatch = valueXml.match(/<boolean>([^<]*)<\/boolean>/i)
-    if (boolMatch) return boolMatch[1] === '1'
-
-    const dateMatch = valueXml.match(/<dateTime\.iso8601>([^<]*)<\/dateTime\.iso8601>/i)
-    if (dateMatch) return dateMatch[1]
-
-    const nilMatch = valueXml.match(/<nil\s*\/?>/i)
-    if (nilMatch) return null
-
-    const arrayMatch = valueXml.match(/<array>\s*<data>([\s\S]*?)<\/data>\s*<\/array>/i)
-    if (arrayMatch) {
-      const values: any[] = []
-      const valueRegex = /<value>([\s\S]*?)<\/value>/gi
-      let match
-      while ((match = valueRegex.exec(arrayMatch[1])) !== null) {
-        values.push(parseValue(match[1]))
-      }
-      return values
+  try {
+    const parsed = parser.parse(xml)
+    
+    // Check for fault
+    if (parsed?.methodResponse?.fault) {
+      const faultValue = extractValue(parsed.methodResponse.fault.value)
+      throw new Error(`XML-RPC Fault: ${faultValue?.faultString || JSON.stringify(faultValue)}`)
     }
-
-    const structMatch = valueXml.match(/<struct>([\s\S]*?)<\/struct>/i)
-    if (structMatch) {
-      const obj: Record<string, any> = {}
-      const memberRegex = /<member>\s*<name>([^<]*)<\/name>\s*<value>([\s\S]*?)<\/value>\s*<\/member>/gi
-      let match
-      while ((match = memberRegex.exec(structMatch[1])) !== null) {
-        obj[match[1]] = parseValue(match[2])
-      }
-      return obj
+    
+    // Get the response data
+    const params = parsed?.methodResponse?.params?.param
+    if (params) {
+      return extractValue(params.value)
     }
-
-    return valueXml.trim()
+    
+    return []
+  } catch (err: any) {
+    if (err.message?.includes('XML-RPC Fault')) {
+      throw err
+    }
+    console.error('[XML-RPC Parse] Error:', err)
+    throw new Error(`Failed to parse XML-RPC response: ${err.message}`)
   }
-
-  const faultMatch = xml.match(/<fault>\s*<value>([\s\S]*?)<\/value>\s*<\/fault>/i)
-  if (faultMatch) {
-    const fault = parseValue(faultMatch[1])
-    throw new Error(`XML-RPC Fault: ${fault.faultString || JSON.stringify(fault)}`)
-  }
-
-  const paramMatch = xml.match(/<params>\s*<param>\s*<value>([\s\S]*?)<\/value>\s*<\/param>\s*<\/params>/i)
-  if (paramMatch) {
-    return parseValue(paramMatch[1])
-  }
-
-  throw new Error('Invalid XML-RPC response')
 }
 
 // Interfaces based on ACTUAL Keap table schema
