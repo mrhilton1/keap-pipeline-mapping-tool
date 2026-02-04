@@ -792,23 +792,41 @@ export function MigrationDashboard() {
             processed = processed.replace(/{user\.last_name}/g, opportunity.user?.last_name || '')
             processed = processed.replace(/{user\.id}/g, String(opportunity.user?.id || ''))
             
+            // Helper: Parse XML-RPC date format (20180406T12:13:58 → Date)
+            const parseXmlRpcDate = (dateStr: string): Date | null => {
+              if (!dateStr) return null
+              // Format: 20180406T12:13:58 or 20180406T12:13:58
+              const match = dateStr.match(/^(\d{4})(\d{2})(\d{2})T(\d{2}):(\d{2}):(\d{2})$/)
+              if (match) {
+                const [, year, month, day, hour, min, sec] = match
+                return new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(min), parseInt(sec))
+              }
+              // Fallback to standard parsing
+              const parsed = new Date(dateStr)
+              return isNaN(parsed.getTime()) ? null : parsed
+            }
+            
             // XML-RPC: Stage Moves/History
             const stageMoves = oppAny.stageMoves
             if (stageMoves) {
-              processed = processed.replace(/{stageMoves\.lastUpdated}/g, stageMoves.lastUpdated ? new Date(stageMoves.lastUpdated).toLocaleDateString() : '')
-              processed = processed.replace(/{stageMoves\.outcomeDate}/g, stageMoves.outcomeDate ? new Date(stageMoves.outcomeDate).toLocaleDateString() : '')
+              const lastUpdatedDate = stageMoves.lastUpdated ? parseXmlRpcDate(stageMoves.lastUpdated) : null
+              const outcomeDateDate = stageMoves.outcomeDate ? parseXmlRpcDate(stageMoves.outcomeDate) : null
+              
+              processed = processed.replace(/{stageMoves\.lastUpdated}/g, lastUpdatedDate ? lastUpdatedDate.toLocaleDateString() : '')
+              processed = processed.replace(/{stageMoves\.outcomeDate}/g, outcomeDateDate ? outcomeDateDate.toLocaleDateString() : '')
               processed = processed.replace(/{stageMoves\.outcome}/g, stageMoves.outcome || '')
               
               // Stage moves array (moves or just the array itself)
               const moves = Array.isArray(stageMoves) ? stageMoves : (stageMoves.moves || [])
               processed = processed.replace(/{stageMoves\.count}/g, String(moves.length))
               
-              // Format history
+              // Format history with proper date parsing
               const history = moves.map((m: any) => {
-                const date = m.MoveDate ? new Date(m.MoveDate.replace('T', ' ')).toLocaleDateString() : ''
+                const parsedDate = parseXmlRpcDate(m.MoveDate)
+                const dateStr = parsedDate ? parsedDate.toLocaleDateString() : ''
                 const from = m.MoveFromStageName || 'Unknown'
                 const to = m.MoveToStageName || 'Unknown'
-                return `${date}: ${from} → ${to}`
+                return `${dateStr}: ${from} → ${to}`
               }).join('\n')
               processed = processed.replace(/{stageMoves\.history}/g, history)
             } else {
