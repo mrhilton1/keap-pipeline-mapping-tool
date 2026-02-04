@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ChevronRight, Play, Copy, Check, ArrowLeft, ChevronDown, ChevronUp } from "lucide-react"
 import Link from "next/link"
 
@@ -26,6 +27,8 @@ interface TestResult {
   summary?: any
   error?: string
   message?: string
+  requestXml?: string
+  responseXml?: string
 }
 
 const TESTS = [
@@ -284,26 +287,90 @@ export default function DebugPage() {
                       </div>
                     )}
 
-                    {/* Main Data */}
-                    {result.data && (
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs text-zinc-500 uppercase font-semibold tracking-wider">
-                            Response Data ({Array.isArray(result.data) ? result.data.length : 1} records)
-                          </span>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 px-2 text-zinc-500 hover:text-white"
-                            onClick={() => copyToClipboard(JSON.stringify(result.data, null, 2), `${test.id}-data`)}
-                          >
-                            {copied === `${test.id}-data` ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                          </Button>
-                        </div>
-                        <pre className="bg-[#0d0d12] border border-zinc-800 rounded-lg p-4 text-sm font-mono overflow-x-auto max-h-96 text-amber-300">
+                    {/* Main Data with JSON/XML tabs */}
+                    {(result.data || result.requestXml || result.responseXml) && (
+                      <Tabs defaultValue="json" className="w-full">
+                        <TabsList className="bg-zinc-800 border-zinc-700">
+                          <TabsTrigger value="json" className="data-[state=active]:bg-zinc-700">
+                            Parsed JSON
+                          </TabsTrigger>
+                          <TabsTrigger value="request" className="data-[state=active]:bg-zinc-700">
+                            Request XML
+                          </TabsTrigger>
+                          <TabsTrigger value="response" className="data-[state=active]:bg-zinc-700">
+                            Response XML
+                          </TabsTrigger>
+                        </TabsList>
+                        
+                        <TabsContent value="json" className="mt-4">
+                          {result.data && (
+                            <div>
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs text-zinc-500 uppercase font-semibold tracking-wider">
+                                  Response Data ({Array.isArray(result.data) ? result.data.length : 1} records)
+                                </span>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 px-2 text-zinc-500 hover:text-white"
+                                  onClick={() => copyToClipboard(JSON.stringify(result.data, null, 2), `${test.id}-data`)}
+                                >
+                                  {copied === `${test.id}-data` ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                                </Button>
+                              </div>
+                              <pre className="bg-[#0d0d12] border border-zinc-800 rounded-lg p-4 text-sm font-mono overflow-x-auto max-h-96 text-amber-300">
 {JSON.stringify(result.data, null, 2)}
-                        </pre>
-                      </div>
+                              </pre>
+                            </div>
+                          )}
+                        </TabsContent>
+                        
+                        <TabsContent value="request" className="mt-4">
+                          {result.requestXml && (
+                            <div>
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs text-zinc-500 uppercase font-semibold tracking-wider">
+                                  Request XML
+                                </span>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 px-2 text-zinc-500 hover:text-white"
+                                  onClick={() => copyToClipboard(result.requestXml!, `${test.id}-reqxml`)}
+                                >
+                                  {copied === `${test.id}-reqxml` ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                                </Button>
+                              </div>
+                              <pre className="bg-[#0d0d12] border border-zinc-800 rounded-lg p-4 text-sm font-mono overflow-x-auto max-h-96 text-green-400 whitespace-pre-wrap">
+{result.requestXml}
+                              </pre>
+                            </div>
+                          )}
+                        </TabsContent>
+                        
+                        <TabsContent value="response" className="mt-4">
+                          {result.responseXml && (
+                            <div>
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs text-zinc-500 uppercase font-semibold tracking-wider">
+                                  Response XML ({result.responseXml.length} chars)
+                                </span>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 px-2 text-zinc-500 hover:text-white"
+                                  onClick={() => copyToClipboard(result.responseXml!, `${test.id}-resxml`)}
+                                >
+                                  {copied === `${test.id}-resxml` ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                                </Button>
+                              </div>
+                              <pre className="bg-[#0d0d12] border border-zinc-800 rounded-lg p-4 text-sm font-mono overflow-x-auto max-h-96 text-cyan-400 whitespace-pre-wrap">
+{result.responseXml}
+                              </pre>
+                            </div>
+                          )}
+                        </TabsContent>
+                      </Tabs>
                     )}
                   </CardContent>
                 )}

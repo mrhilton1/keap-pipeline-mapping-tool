@@ -64,6 +64,16 @@ function parseXmlRpcResponse(xml: string): any {
   return null
 }
 
+// Escape XML special characters
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+}
+
 // Make XML-RPC call and return parsed JSON
 async function xmlRpcCall(
   accessToken: string,
@@ -71,7 +81,7 @@ async function xmlRpcCall(
   limit: number,
   queryData: Record<string, any>,
   fields: string[]
-): Promise<{ success: boolean; data: any; error?: string; rawXml?: string }> {
+): Promise<{ success: boolean; data: any; error?: string; rawXml?: string; requestXml?: string }> {
   
   const serializeQueryData = (data: Record<string, any>): string => {
     const members = Object.entries(data).map(([key, value]) => {
@@ -79,7 +89,8 @@ async function xmlRpcCall(
       if (typeof value === 'number') {
         valueXml = `<value><int>${value}</int></value>`
       } else {
-        valueXml = `<value><string>${String(value)}</string></value>`
+        // Escape special XML characters (important for ~>~0 queries)
+        valueXml = `<value><string>${escapeXml(String(value))}</string></value>`
       }
       return `<member><name>${key}</name>${valueXml}</member>`
     }).join('')
@@ -104,6 +115,8 @@ async function xmlRpcCall(
   </params>
 </methodCall>`
 
+  console.log(`[XML-RPC] Request to ${table}:\n${xmlRequest}`)
+
   const response = await fetch('https://api.infusionsoft.com/crm/xmlrpc/v1', {
     method: 'POST',
     headers: {
@@ -114,13 +127,26 @@ async function xmlRpcCall(
   })
 
   const responseText = await response.text()
+  console.log(`[XML-RPC] Response from ${table} (${responseText.length} chars): ${responseText.substring(0, 500)}`)
+  
   const parsed = parseXmlRpcResponse(responseText)
   
   if (parsed?.__fault) {
-    return { success: false, data: null, error: parsed.__fault.faultString || JSON.stringify(parsed.__fault), rawXml: responseText }
+    return { 
+      success: false, 
+      data: null, 
+      error: parsed.__fault.faultString || JSON.stringify(parsed.__fault), 
+      rawXml: responseText,
+      requestXml: xmlRequest 
+    }
   }
 
-  return { success: true, data: Array.isArray(parsed) ? parsed : [], rawXml: responseText }
+  return { 
+    success: true, 
+    data: Array.isArray(parsed) ? parsed : [], 
+    rawXml: responseText,
+    requestXml: xmlRequest 
+  }
 }
 
 /**
@@ -156,7 +182,9 @@ export async function GET(request: Request) {
           success: result.success,
           recordCount: result.data?.length || 0,
           data: result.data,
-          error: result.error
+          error: result.error,
+          requestXml: result.requestXml,
+          responseXml: result.rawXml
         })
       }
 
@@ -176,7 +204,9 @@ export async function GET(request: Request) {
             description: `Products for Opportunity #${oppId}`,
             success: false,
             step: 'ProductInterest query failed',
-            error: piResult.error
+            error: piResult.error,
+            requestXml: piResult.requestXml,
+            responseXml: piResult.rawXml
           })
         }
 
@@ -190,7 +220,9 @@ export async function GET(request: Request) {
             recordCount: 0,
             productInterests: [],
             products: [],
-            message: 'No ProductInterest records found for this opportunity'
+            message: 'No ProductInterest records found for this opportunity',
+            requestXml: piResult.requestXml,
+            responseXml: piResult.rawXml
           })
         }
 
@@ -230,7 +262,9 @@ export async function GET(request: Request) {
             productInterestCount: productInterests.length,
             uniqueProductIds: productIds,
             productsFound: products.length
-          }
+          },
+          requestXml: piResult.requestXml,
+          responseXml: piResult.rawXml
         })
       }
 
@@ -248,7 +282,9 @@ export async function GET(request: Request) {
           success: result.success,
           recordCount: result.data?.length || 0,
           data: result.data,
-          error: result.error
+          error: result.error,
+          requestXml: result.requestXml,
+          responseXml: result.rawXml
         })
       }
 
@@ -267,7 +303,9 @@ export async function GET(request: Request) {
             test: 'stagemove',
             description: `Stage moves for Opportunity #${oppId}`,
             success: false,
-            error: smResult.error
+            error: smResult.error,
+            requestXml: smResult.requestXml,
+            responseXml: smResult.rawXml
           })
         }
 
@@ -329,7 +367,9 @@ export async function GET(request: Request) {
             lastUpdate,
             outcomeDate,
             outcomeType
-          }
+          },
+          requestXml: smResult.requestXml,
+          responseXml: smResult.rawXml
         })
       }
 
