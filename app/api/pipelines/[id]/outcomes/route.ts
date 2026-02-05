@@ -15,17 +15,14 @@ export async function GET(
     }
 
     const { id } = await params
-    console.log(`[Outcomes API] Fetching outcomes for pipeline: ${id}`)
 
     const client = new KeapClient(accessToken.value)
     
     try {
       const outcomes = await client.getPipelineOutcomes(id)
-      console.log(`[Outcomes API] Found ${outcomes.outcomes?.length || 0} outcomes`)
       return NextResponse.json(outcomes)
     } catch (err) {
       // If no outcomes configured, return empty array
-      console.log(`[Outcomes API] No outcomes or error:`, err)
       return NextResponse.json({ outcomes: [] })
     }
   } catch (error) {

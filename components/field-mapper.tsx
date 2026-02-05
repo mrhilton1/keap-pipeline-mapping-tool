@@ -658,8 +658,6 @@ export function FieldMapper({ opportunities, pipelines: propPipelines, initialPi
         }
       })
       
-      console.log("[FieldMapper] Pre-selecting pipeline:", initialPipeline.name)
-      console.log("[FieldMapper] Computed perStageMappings:", perStageMappings)
       
       setStageMapping({
         pipelineId: initialPipeline.id,

@@ -14,7 +14,6 @@ export async function GET() {
     const client = new KeapClient(accessToken.value)
     const users = await client.getUsers()
 
-    console.log("[Users API] Fetched users:", users?.length || 0)
     return NextResponse.json({ users })
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error"

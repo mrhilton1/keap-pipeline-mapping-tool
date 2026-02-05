@@ -196,7 +196,6 @@ export class KeapClient {
 
   private async request<T>(baseUrl: string, endpoint: string, options?: RequestInit): Promise<T> {
     const url = `${baseUrl}${endpoint}`
-    console.log(`[Keap API] ${options?.method || 'GET'} ${url}`)
     
     const response = await fetch(url, {
       ...options,
@@ -208,7 +207,6 @@ export class KeapClient {
     })
 
     const responseText = await response.text()
-    console.log(`[Keap API] Response status: ${response.status}`)
     
     if (!response.ok) {
       console.error(`[Keap API] Error response: ${responseText}`)

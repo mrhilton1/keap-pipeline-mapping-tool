@@ -12,7 +12,6 @@ export async function GET() {
     ]
   }
   
-  console.log("[Version API] Checked - commit:", version.commit)
   
   return NextResponse.json(version)
 }

@@ -141,7 +141,6 @@ async function xmlRpcCall(
   </params>
 </methodCall>`
 
-  console.log(`[XML-RPC] Request to ${table}:\n${xmlRequest}`)
 
   const response = await fetch('https://api.infusionsoft.com/crm/xmlrpc/v1', {
     method: 'POST',
@@ -153,7 +152,6 @@ async function xmlRpcCall(
   })
 
   const responseText = await response.text()
-  console.log(`[XML-RPC] Response from ${table} (${responseText.length} chars): ${responseText.substring(0, 500)}`)
   
   const parsed = parseXmlRpcResponse(responseText)
   

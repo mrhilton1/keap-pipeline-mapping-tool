@@ -40,7 +40,6 @@ export async function GET() {
     const client = new KeapXmlRpcClient(accessToken)
 
     // Test 1: ProductInterest - use query with ObjectId=2 (MATCHES WORKING CURL)
-    console.log('[XML-RPC Test] Testing ProductInterest.query(ObjectId=2)...')
     try {
       const result = await client.query(
         'ProductInterest',
@@ -56,14 +55,12 @@ export async function GET() {
         count: productInterests.length,
         sample: productInterests[0] || null
       }
-      console.log(`[XML-RPC Test] ProductInterest result:`, JSON.stringify(result).substring(0, 500))
     } catch (err: any) {
       console.error('[XML-RPC Test] ProductInterest error:', err)
       results.productInterest = { success: false, error: err.message || String(err), count: 0 }
     }
 
     // Test 2: StageMove - use query with OpportunityId=2
-    console.log('[XML-RPC Test] Testing StageMove.query(OpportunityId=2)...')
     try {
       const result = await client.query(
         'StageMove',
@@ -79,14 +76,12 @@ export async function GET() {
         count: stageMoves.length,
         sample: stageMoves[0] || null
       }
-      console.log(`[XML-RPC Test] StageMove result:`, JSON.stringify(result).substring(0, 500))
     } catch (err: any) {
       console.error('[XML-RPC Test] StageMove error:', err)
       results.stageMove = { success: false, error: err.message || String(err), count: 0 }
     }
 
     // Test 3: Product table - get any products
-    console.log('[XML-RPC Test] Testing Product table...')
     try {
       const result = await client.query(
         'Product',
@@ -110,7 +105,6 @@ export async function GET() {
     // BOTH ProductInterest and StageMove must pass for overall success
     const overallSuccess = results.productInterest.success && results.stageMove.success
 
-    console.log(`[XML-RPC Test] ProductInterest: ${results.productInterest.success ? '✓' : '✗'}, StageMove: ${results.stageMove.success ? '✓' : '✗'}, Product: ${results.product.success ? '✓' : '✗'}, Duration: ${duration}ms`)
 
     return NextResponse.json({
       success: overallSuccess,

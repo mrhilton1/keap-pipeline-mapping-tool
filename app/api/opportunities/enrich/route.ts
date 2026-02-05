@@ -39,12 +39,10 @@ export async function POST(request: Request) {
       }, { status: 401 })
     }
 
-    console.log(`[Enrich API] Enriching ${opportunityIds.length} opportunities`)
     
     const client = new KeapXmlRpcClient(accessToken.value)
     
     // Step 1: Fetch ALL stages to build ID -> Name lookup
-    console.log(`[Enrich API] Fetching Stage lookup table...`)
     const stageMap = new Map<number, string>()
     try {
       const stagesResult = await client.query(
@@ -60,13 +58,11 @@ export async function POST(request: Request) {
           stageMap.set(stage.Id, stage.StageName)
         }
       }
-      console.log(`[Enrich API] Loaded ${stageMap.size} stages`)
     } catch (err) {
       console.error(`[Enrich API] Stage lookup failed:`, err)
     }
     
     // Step 2: Fetch ALL products to build ID -> Details lookup
-    console.log(`[Enrich API] Fetching Product lookup table...`)
     const productMap = new Map<number, { name: string; price: number }>()
     try {
       const productsResult = await client.query(
@@ -85,13 +81,11 @@ export async function POST(request: Request) {
           })
         }
       }
-      console.log(`[Enrich API] Loaded ${productMap.size} products`)
     } catch (err) {
       console.error(`[Enrich API] Product lookup failed:`, err)
     }
     
     // Step 2b: Fetch ALL subscription plans to build ID -> Details lookup
-    console.log(`[Enrich API] Fetching SubscriptionPlan lookup table...`)
     const subscriptionPlanMap = new Map<number, { 
       productId: number
       planPrice: number
@@ -121,7 +115,6 @@ export async function POST(request: Request) {
           })
         }
       }
-      console.log(`[Enrich API] Loaded ${subscriptionPlanMap.size} subscription plans`)
     } catch (err) {
       console.error(`[Enrich API] SubscriptionPlan lookup failed:`, err)
     }
@@ -154,7 +147,6 @@ export async function POST(request: Request) {
         if (leadList.length > 0 && leadList[0].OrderRevenue) {
           orderRevenue = Number(leadList[0].OrderRevenue) || 0
           orderRevenueData[String(numericId)] = orderRevenue
-          console.log(`[Enrich API] Opp #${numericId}: OrderRevenue = $${orderRevenue}`)
         }
       } catch (err) {
         console.error(`[Enrich API] Lead/OrderRevenue error for Opp #${numericId}:`, err)
@@ -195,7 +187,6 @@ export async function POST(request: Request) {
                   isSubscription: true
                 }
                 
-                console.log(`[Enrich API] Opp #${numericId}: Found subscription plan ${pi.SubscriptionPlanId} → Product "${productDetails?.name}" @ $${subPlan.planPrice}/${subPlan.cycle}`)
               }
             }
             
@@ -236,7 +227,6 @@ export async function POST(request: Request) {
             // Calculate remainder to distribute among one-time products
             const remainder = orderRevenue - nonZeroSum
             
-            console.log(`[Enrich API] Opp #${numericId}: OrderRevenue=$${orderRevenue}, OneTimeSum=$${nonZeroSum}, Remainder=$${remainder}, ZeroOneTimeProducts=${zeroCount}`)
             
             if (remainder > 0 && zeroCount > 0) {
               const distributedPrice = remainder / zeroCount
@@ -260,12 +250,10 @@ export async function POST(request: Request) {
                 return p
               })
               
-              console.log(`[Enrich API] Opp #${numericId}: Distributed $${distributedPrice.toFixed(2)} to ${zeroCount} zero-price one-time products`)
             }
           }
           
           products[String(numericId)] = enrichedProducts
-          console.log(`[Enrich API] Opp #${numericId}: ${productList.length} products`)
         }
       } catch (err) {
         console.error(`[Enrich API] ProductInterest error for Opp #${numericId}:`, err)
@@ -322,7 +310,6 @@ export async function POST(request: Request) {
             outcomeDate,
             outcome
           }
-          console.log(`[Enrich API] Opp #${numericId}: ${stageMoveList.length} stage moves, outcome: ${outcome || 'none'}`)
         }
       } catch (err) {
         console.error(`[Enrich API] StageMove error for Opp #${numericId}:`, err)
@@ -333,7 +320,6 @@ export async function POST(request: Request) {
     const stageMovesCount = Object.keys(stageMoveData).length
     const orderRevenueCount = Object.keys(orderRevenueData).length
     
-    console.log(`[Enrich API] Complete! Products for ${productsCount} opps, StageMoves for ${stageMovesCount} opps, OrderRevenue for ${orderRevenueCount} opps`)
 
     return NextResponse.json({ 
       products,

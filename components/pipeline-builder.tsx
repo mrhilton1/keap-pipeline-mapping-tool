@@ -179,7 +179,6 @@ export function PipelineBuilder({
       stages 
     }
     
-    console.log("[Drag] Reorder:", fromIndex, "→", toIndex, "Result:", stages.map((s, i) => `${i}:${s}`))
     onSuggestionsChange(newSuggestions)
   }
 

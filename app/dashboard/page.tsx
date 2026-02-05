@@ -16,8 +16,6 @@ export default async function DashboardPage({
   const justAuthenticated = params.auth === "success"
 
   // Debug: log cookie status on server
-  console.log("[Dashboard] Access token present:", !!accessToken?.value)
-  console.log("[Dashboard] Just authenticated:", justAuthenticated)
 
   if (!accessToken) {
     // If just authenticated but no token, show error instead of redirect

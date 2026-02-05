@@ -23,7 +23,6 @@ export async function POST() {
       }, { status: 500 })
     }
 
-    console.log("[Keap Refresh] Attempting token refresh...")
 
     // Per Keap docs: Refresh requires Basic Auth header
     // https://developer.infusionsoft.com/getting-started-oauth-keys/
@@ -59,7 +58,6 @@ export async function POST() {
     }
 
     const tokenData = JSON.parse(responseText)
-    console.log("[Keap Refresh] Success! New token expires in:", tokenData.expires_in, "seconds")
 
     const jsonResponse = NextResponse.json({ 
       success: true,

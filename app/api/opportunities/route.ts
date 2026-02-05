@@ -12,11 +12,9 @@ export async function GET() {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
     }
 
-    console.log("[Opportunities API] Fetching opportunities...")
     const client = new KeapClient(accessToken.value)
     const opportunities = await client.getOpportunities()
 
-    console.log("[Opportunities API] Success, count:", opportunities?.opportunities?.length || 0)
     return NextResponse.json(opportunities)
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error"

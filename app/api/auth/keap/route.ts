@@ -37,8 +37,6 @@ export async function GET(request: NextRequest) {
       }, { status: 500 })
     }
 
-    console.log("[Keap OAuth] Starting auth flow")
-    console.log("[Keap OAuth] Redirect URI:", redirectUri)
 
     // Build Keap OAuth authorization URL
     // Per docs: https://developer.infusionsoft.com/getting-started-oauth-keys/

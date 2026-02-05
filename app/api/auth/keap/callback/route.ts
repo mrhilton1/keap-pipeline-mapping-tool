@@ -26,9 +26,6 @@ export async function GET(request: NextRequest) {
   const errorDescription = searchParams.get("error_description")
   const origin = getOrigin(request)
 
-  console.log("[Keap OAuth Callback] ========== START ==========")
-  console.log("[Keap OAuth Callback] Origin:", origin)
-  console.log("[Keap OAuth Callback] Code received:", code ? "Yes" : "No")
   
   // Handle OAuth errors from Keap
   if (error) {
@@ -46,7 +43,6 @@ export async function GET(request: NextRequest) {
   const clientSecret = process.env.KEAP_CLIENT_SECRET
   const redirectUri = process.env.KEAP_REDIRECT_URI || `${origin}/api/auth/keap/callback`
 
-  console.log("[Keap OAuth Callback] Redirect URI:", redirectUri)
 
   if (!clientId || !clientSecret) {
     console.error("[Keap OAuth Callback] Missing credentials")
@@ -54,7 +50,6 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    console.log("[Keap OAuth Callback] Exchanging code for token...")
     
     // Exchange authorization code for access token
     const tokenResponse = await fetch("https://api.infusionsoft.com/token", {
@@ -72,7 +67,6 @@ export async function GET(request: NextRequest) {
     })
 
     const responseText = await tokenResponse.text()
-    console.log("[Keap OAuth Callback] Token response status:", tokenResponse.status)
     
     if (!tokenResponse.ok) {
       console.error("[Keap OAuth Callback] Token exchange failed:", responseText)
@@ -90,11 +84,6 @@ export async function GET(request: NextRequest) {
 
     const tokenData = JSON.parse(responseText)
     
-    console.log("[Keap OAuth Callback] ✓ Token received!")
-    console.log("[Keap OAuth Callback] Expires in:", tokenData.expires_in, "seconds")
-    console.log("[Keap OAuth Callback] Scope granted:", tokenData.scope || "not specified in response")
-    console.log("[Keap OAuth Callback] Token type:", tokenData.token_type)
-    console.log("[Keap OAuth Callback] Full response keys:", Object.keys(tokenData))
 
     // Build Set-Cookie headers
     const accessTokenCookie = [
@@ -115,8 +104,6 @@ export async function GET(request: NextRequest) {
       `Max-Age=${60 * 60 * 24 * 30}`
     ].join("; ") : null
 
-    console.log("[Keap OAuth Callback] Cookie header:", accessTokenCookie.substring(0, 50) + "...")
-    console.log("[Keap OAuth Callback] ========== END ==========")
 
     // Return an HTML page that handles both popup and redirect flows
     // This ensures the browser processes the Set-Cookie headers before navigation

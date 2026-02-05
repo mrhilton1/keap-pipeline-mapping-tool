@@ -25,7 +25,6 @@ export async function GET() {
     const refreshToken = cookieStore.get("keap_refresh_token")
     const allCookies = cookieStore.getAll()
 
-    console.log("[Test API] ========== START ==========")
 
     results.cookies.hasAccessToken = !!accessToken?.value
     results.cookies.hasRefreshToken = !!refreshToken?.value
@@ -40,7 +39,6 @@ export async function GET() {
     }
 
     // Test 1: Opportunities API (v1)
-    console.log("[Test API] Testing Opportunities API...")
     try {
       const oppResponse = await fetch("https://api.infusionsoft.com/crm/rest/v1/opportunities?limit=5", {
         headers: { Authorization: `Bearer ${accessToken.value}` }
@@ -68,7 +66,6 @@ export async function GET() {
     }
 
     // Test 2: Legacy Opportunity Stages (v1) - NOT actual pipelines!
-    console.log("[Test API] Testing Legacy Stages API (v1)...")
     try {
       const stagesResponse = await fetch("https://api.infusionsoft.com/crm/rest/v1/opportunity/stage_pipeline", {
         headers: { Authorization: `Bearer ${accessToken.value}` }
@@ -96,15 +93,12 @@ export async function GET() {
     }
 
     // Test 3: NEW Pipelines API (v2) - Correct URL: /services/v2/
-    console.log("[Test API] Testing Pipelines v2 API (/services/v2/)...")
     try {
       const pipeResponse = await fetch("https://api.infusionsoft.com/services/v2/pipelines/", {
         headers: { Authorization: `Bearer ${accessToken.value}` }
       })
       const pipeText = await pipeResponse.text()
       
-      console.log("[Test API] v2 Pipelines status:", pipeResponse.status)
-      console.log("[Test API] v2 Pipelines response:", pipeText.substring(0, 200))
       
       if (pipeResponse.ok) {
         const pipeData = JSON.parse(pipeText)
@@ -128,7 +122,6 @@ export async function GET() {
       }
     }
 
-    console.log("[Test API] ========== END ==========")
     return NextResponse.json(results)
   } catch (error) {
     return NextResponse.json({

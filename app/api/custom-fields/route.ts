@@ -15,7 +15,6 @@ export async function GET() {
     const client = new KeapClient(accessToken.value)
     const customFields = await client.getCustomFields()
     
-    console.log("[Custom Fields API] Found:", customFields.custom_fields?.length || 0, "fields")
     
     return NextResponse.json(customFields)
   } catch (error) {
@@ -63,7 +62,6 @@ export async function POST(request: Request) {
       primitiveType: primitiveType.toUpperCase()
     })
 
-    console.log("[Custom Fields API] Created field:", customField.id, customField.name)
 
     return NextResponse.json(customField)
   } catch (error) {

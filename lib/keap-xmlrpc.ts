@@ -190,7 +190,6 @@ export class KeapXmlRpcClient {
     const fullParams = ['', ...params]
     const body = buildMethodCall(method, fullParams)
 
-    console.log(`[XML-RPC] Calling ${method}`)
     
     const response = await fetch(this.endpoint, {
       method: 'POST',
@@ -246,7 +245,6 @@ export class KeapXmlRpcClient {
    * Uses ObjectId field which links to Opportunity Id
    */
   async getAllProductInterests(): Promise<ProductInterest[]> {
-    console.log('[XML-RPC] Fetching ALL ProductInterest records')
     
     const allInterests: ProductInterest[] = []
     let page = 0
@@ -266,7 +264,6 @@ export class KeapXmlRpcClient {
       // Handle non-array responses (empty result returns {} not [])
       const batch = Array.isArray(result) ? result : []
       
-      console.log(`[XML-RPC] ProductInterest page ${page}: ${batch.length} records`)
       
       if (batch.length === 0) break
       allInterests.push(...batch)
@@ -275,11 +272,9 @@ export class KeapXmlRpcClient {
       page++
     }
     
-    console.log(`[XML-RPC] Found ${allInterests.length} total ProductInterest records`)
     
     // Filter to only those with an ObjectId (which is the Opportunity Id)
     const withOppId = allInterests.filter(pi => pi.ObjectId != null && pi.ObjectId > 0)
-    console.log(`[XML-RPC] ${withOppId.length} have ObjectId (Opportunity link)`)
     
     return withOppId
   }
@@ -308,7 +303,6 @@ export class KeapXmlRpcClient {
    * Uses MoveToStage and MoveFromStage (IDs, not names)
    */
   async getAllStageMoves(): Promise<StageMove[]> {
-    console.log('[XML-RPC] Fetching ALL StageMove records')
     
     const allMoves: StageMove[] = []
     let page = 0
@@ -328,7 +322,6 @@ export class KeapXmlRpcClient {
       // Handle non-array responses (empty result returns {} not [])
       const batch = Array.isArray(result) ? result : []
       
-      console.log(`[XML-RPC] StageMove page ${page}: ${batch.length} records`)
       
       if (batch.length === 0) break
       allMoves.push(...batch)
@@ -337,7 +330,6 @@ export class KeapXmlRpcClient {
       page++
     }
     
-    console.log(`[XML-RPC] Found ${allMoves.length} total StageMove records`)
     return allMoves
   }
 
@@ -404,7 +396,6 @@ export class KeapXmlRpcClient {
     
     // Get unique product IDs
     const productIds = [...new Set(productInterests.map(pi => pi.ProductId))]
-    console.log(`[XML-RPC] Fetching details for ${productIds.length} unique products`)
     
     // Fetch all product details
     const productMap = new Map<number, Product>()
@@ -429,7 +420,6 @@ export class KeapXmlRpcClient {
       result.set(pi.ObjectId, oppProducts)
     }
     
-    console.log(`[XML-RPC] Built product map for ${result.size} opportunities`)
     return result
   }
 
@@ -471,7 +461,6 @@ export class KeapXmlRpcClient {
       result.set(oppId, { moves, ...analysis })
     }
     
-    console.log(`[XML-RPC] Built stage move map for ${result.size} opportunities`)
     return result
   }
 }

@@ -247,7 +247,6 @@ export function MigrationDashboard() {
       let enrichedOpps = opps
       if (opps.length > 0) {
         try {
-          console.log("[Dashboard] Enriching opportunities with XML-RPC data...")
           const enrichRes = await fetch("/api/opportunities/enrich", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -256,7 +255,6 @@ export function MigrationDashboard() {
           
           if (enrichRes.ok) {
             const enrichData = await enrichRes.json()
-            console.log("[Dashboard] XML-RPC enrichment response:", enrichData)
             
             // Merge enrichment data into opportunities
             enrichedOpps = opps.map((opp: Opportunity) => {
@@ -275,12 +273,9 @@ export function MigrationDashboard() {
             const productsCount = Object.values(enrichData.products || {}).filter((p: any) => p?.length > 0).length
             const stageMovesCount = Object.values(enrichData.stageMoves || {}).filter((m: any) => m?.moves?.length > 0).length
             const orderRevenueCount = Object.keys(enrichData.orderRevenue || {}).length
-            console.log(`[Dashboard] Enriched: ${productsCount} with products, ${stageMovesCount} with stage moves, ${orderRevenueCount} with orderRevenue`)
           } else {
-            console.warn("[Dashboard] XML-RPC enrichment failed:", await enrichRes.text())
           }
         } catch (enrichErr) {
-          console.warn("[Dashboard] XML-RPC enrichment error (non-fatal):", enrichErr)
           // Continue without enrichment - it's optional
         }
       }
@@ -367,7 +362,6 @@ export function MigrationDashboard() {
     
     for (const pipeline of pipelinesToCreate) {
       try {
-        console.log(`[Dashboard] Creating pipeline: ${pipeline.name} with stages:`, pipeline.stages)
         
         const response = await fetch("/api/pipelines", {
           method: "POST",
@@ -390,7 +384,6 @@ export function MigrationDashboard() {
           throw new Error(data.details || data.error || "Unknown error")
         }
 
-        console.log(`[Dashboard] Pipeline created successfully:`, data)
         created.push(data)
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : "Unknown error"
@@ -511,7 +504,6 @@ export function MigrationDashboard() {
 
   // Compute migration preview for a pipeline
   const computeMigrationPreview = (pipeline: Pipeline, outcomes: Record<string, "ACTIVE" | "WON" | "LOST"> = pipelineOutcomes) => {
-    console.log("[Preview] Computing with outcomes:", outcomes)
     const stageConfig = fieldMappingConfig?.stageMapping
     const selectedOpps = opportunities.filter(o => selectedOpportunities.has(o.id))
     
@@ -534,16 +526,12 @@ export function MigrationDashboard() {
     
     // Helper: find matching stage by name (case-insensitive)
     const findMatchingStage = (oppStageName: string | null) => {
-      console.log(`[Preview] findMatchingStage called with: "${oppStageName}"`)
-      console.log(`[Preview] Pipeline stages:`, pipeline.stages?.map(s => s.name))
       if (!oppStageName || !pipeline.stages) {
-        console.log(`[Preview] No match: oppStageName=${oppStageName}, hasStages=${!!pipeline.stages}`)
         return null
       }
       const match = pipeline.stages.find(
         s => (s.name || '').toLowerCase() === (oppStageName || '').toLowerCase()
       )
-      console.log(`[Preview] Match result:`, match ? match.name : "NO MATCH")
       return match
     }
     
@@ -563,7 +551,6 @@ export function MigrationDashboard() {
           targetStageId = mapping.targetStageId
           targetStageName = mapping.targetStageName
           isAutoMatched = mapping.isAutoMatched
-          console.log(`[Preview] Explicit mapping: "${oppStageName}" → "${targetStageName}"`)
         } else {
           // Mapping exists but has no target - try auto-match by name first
           const matchedStage = findMatchingStage(oppStageName)
@@ -571,15 +558,12 @@ export function MigrationDashboard() {
             targetStageId = matchedStage.id
             targetStageName = matchedStage.name
             isAutoMatched = true
-            console.log(`[Preview] Fallback auto-match: "${oppStageName}" → "${matchedStage.name}"`)
           } else if (stageConfig.fallbackStageId && stageConfig.fallbackStageName) {
             // Use configured fallback
             targetStageId = stageConfig.fallbackStageId
             targetStageName = stageConfig.fallbackStageName + " (fallback)"
             isAutoMatched = false
-            console.log(`[Preview] Using fallback stage: "${stageConfig.fallbackStageName}"`)
           } else {
-            console.log(`[Preview] No match and no fallback for: "${oppStageName}"`)
           }
         }
       } else {
@@ -589,7 +573,6 @@ export function MigrationDashboard() {
           targetStageId = matchedStage.id
           targetStageName = matchedStage.name
           isAutoMatched = true
-          console.log(`[Preview] Auto-matched "${oppStageName}" → "${matchedStage.name}"`)
         } else {
           // No match - use first stage as fallback (implicit fallback)
           const firstStage = pipeline.stages?.[0]
@@ -597,7 +580,6 @@ export function MigrationDashboard() {
             targetStageId = firstStage.id
             targetStageName = firstStage.name
             isAutoMatched = false
-            console.log(`[Preview] No match for "${oppStageName}", using first stage: "${firstStage.name}"`)
           }
         }
       }
@@ -660,7 +642,6 @@ export function MigrationDashboard() {
       setOutcomesConfigured(true)
       setOutcomesModalOpen(false)
       // Pass the current pipelineOutcomes state directly
-      console.log("[Confirm Outcomes] Using outcomes:", pipelineOutcomes)
       computeMigrationPreview(selectedPipelineForOutcomes, pipelineOutcomes)
     }
   }
@@ -696,9 +677,6 @@ export function MigrationDashboard() {
       // Check if we have smart stage mapping configured
       const useSmartStageMapping = stageConfig?.perStageMappings && stageConfig.perStageMappings.length > 0
       
-      console.log("[Migration] Using smart stage mapping:", useSmartStageMapping)
-      console.log("[Migration] Field mapping config:", fieldMappingConfig)
-      console.log("[Migration] Using currency:", currency)
       
       // Find the pipeline we're migrating to
       const targetPipeline = pipelines.find(p => p.id === pipelineId)
@@ -721,7 +699,6 @@ export function MigrationDashboard() {
             
             if (mapping?.targetStageId) {
               targetStageId = mapping.targetStageId
-              console.log(`[Migration] Explicit mapping: "${oppStageName}" → stage ${targetStageId}`)
             } else {
               // Mapping exists but has no target - try auto-match by name
               if (targetPipeline?.stages) {
@@ -730,14 +707,12 @@ export function MigrationDashboard() {
                 )
                 if (autoMatch) {
                   targetStageId = autoMatch.id
-                  console.log(`[Migration] Fallback auto-match: "${oppStageName}" → "${autoMatch.name}"`)
                 }
               }
               // If still no match, use fallback stage
               if (!targetStageId) {
                 targetStageId = stageConfig.fallbackStageId || null
                 if (targetStageId) {
-                  console.log(`[Migration] Using fallback stage for "${oppStageName}"`)
                 }
               }
             }
@@ -750,14 +725,12 @@ export function MigrationDashboard() {
             )
             if (matchedStage) {
               targetStageId = matchedStage.id
-              console.log(`[Migration] Auto-matched "${oppStageName}" → "${matchedStage.name}"`)
             }
           }
           
           // Fallback to the passed stageId (first stage)
           if (!targetStageId) {
             targetStageId = stageId
-            console.log(`[Migration] No auto-match for "${oppStageName}", using fallback stage`)
           }
         }
         
@@ -782,9 +755,7 @@ export function MigrationDashboard() {
       }
       
       // Log migration plan
-      console.log(`[Migration] Will migrate ${oppsToMigrate.length}, skip ${skippedOpps.length}`)
       if (skippedOpps.length > 0) {
-        console.log("[Migration] Skipped opportunities:", skippedOpps.map(o => o.opportunity_title))
       }
       
       let created = 0
@@ -1060,16 +1031,13 @@ export function MigrationDashboard() {
           // For WON deals, use OrderRevenue if available
           if (status === "WON" && orderRevenue > 0) {
             finalValue = orderRevenue
-            console.log(`[Migration] Value (WON - OrderRevenue): $${finalValue}`)
           } else if (revenueHigh > 0 || revenueLow > 0) {
             if (useAverage && revenueHigh > 0 && revenueLow > 0) {
               // Both values exist - use average
               finalValue = Math.round((revenueHigh + revenueLow) / 2)
-              console.log(`[Migration] Value (Average): (${revenueLow} + ${revenueHigh}) / 2 = ${finalValue}`)
             } else {
               // Use whichever value exists (or high if both, when not averaging)
               finalValue = revenueHigh || revenueLow
-              console.log(`[Migration] Value (Single): ${finalValue}`)
             }
           }
           
@@ -1125,19 +1093,16 @@ export function MigrationDashboard() {
                 const [, year, month, day, hour, min, sec] = match
                 const parsedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(min), parseInt(sec))
                 dealData.closed_time = parsedDate.toISOString()
-                console.log(`[Migration] Actual Close Date: ${outcomeDate} → ${dealData.closed_time}`)
               } else {
                 // Fallback: try standard date parsing
                 const parsed = new Date(outcomeDate)
                 if (!isNaN(parsed.getTime())) {
                   dealData.closed_time = parsed.toISOString()
-                  console.log(`[Migration] Actual Close Date (fallback): ${outcomeDate} → ${dealData.closed_time}`)
                 }
               }
             }
           }
           
-          console.log("[Migration] Creating deal:", dealData.name, "status:", status)
           
           const response = await fetch("/api/deals", {
             method: "POST",
@@ -1572,9 +1537,6 @@ export function MigrationDashboard() {
                                   size="sm"
                                   onClick={() => {
                                     const firstStage = pipeline.stages?.[0]
-                                    console.log("[Migrate Button] Clicked for pipeline:", pipeline.name)
-                                    console.log("[Migrate Button] First stage:", firstStage)
-                                    console.log("[Migrate Button] Selected opportunities:", selectedOpportunities.size)
                                     if (firstStage) {
                                       // Check outcomes first, then show preview
                                       checkPipelineOutcomes(pipeline)

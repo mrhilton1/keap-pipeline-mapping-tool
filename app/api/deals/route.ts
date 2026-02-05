@@ -79,8 +79,6 @@ export async function POST(request: Request) {
       }, { status: 400 })
     }
 
-    console.log(`[Deals API] Creating deal: ${name} in stage ${stage_id}`)
-    console.log("[Deals API] Version: 2026-02-03-v3")  // Version marker
     
     // Build v2 API request with correct schema
     const dealRequest: CreateDealRequest = { 
@@ -127,19 +125,16 @@ export async function POST(request: Request) {
       dealRequest.custom_fields = custom_fields
     }
 
-    console.log("[Deals API] Request body:", JSON.stringify(dealRequest, null, 2))
     
     const client = new KeapClient(accessToken.value)
     const deal = await client.createDeal(dealRequest)
 
-    console.log("[Deals API] Deal created:", deal.id)
     
     // Create notes if provided
     // IMPORTANT: Maintain insertion order - custom migration note should be FIRST
     // Do NOT sort by date - the order from the client is intentional
     // Add small delay between notes to help maintain order in Keap
     if (notes.length > 0 && deal.id) {
-      console.log(`[Deals API] Creating ${notes.length} notes for deal ${deal.id} (in order)`)
       
       for (let i = 0; i < notes.length; i++) {
         const note = notes[i]
@@ -156,7 +151,6 @@ export async function POST(request: Request) {
             noteRequest.created_time = note.created_time
           }
           
-          console.log(`[Deals API] Creating note ${i + 1}/${notes.length}: ${note.body.substring(0, 50)}...`)
           await client.createDealNote(deal.id, noteRequest)
           
           // Small delay between notes to help maintain order

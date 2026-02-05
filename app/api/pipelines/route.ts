@@ -15,10 +15,8 @@ export async function GET() {
     const client = new KeapClient(accessToken.value)
 
     // Try v2 API FIRST - this returns the REAL pipelines
-    console.log("[Pipelines API] Trying v2 API (/services/v2/)...")
     try {
       const pipelinesResponse = await client.getPipelines()
-      console.log("[Pipelines API] v2 Success, count:", pipelinesResponse.pipelines?.length || 0)
 
       // Fetch stages for each pipeline
       const pipelinesWithStages = await Promise.all(
@@ -36,18 +34,14 @@ export async function GET() {
         })
       )
 
-      console.log("[Pipelines API] v2 pipelines with stages:", pipelinesWithStages.length)
       return NextResponse.json({ pipelines: pipelinesWithStages, api: "v2" })
     } catch (v2Error) {
       const v2Message = v2Error instanceof Error ? v2Error.message : "Unknown error"
-      console.log("[Pipelines API] v2 failed:", v2Message)
     }
 
     // Fall back to v1 API (legacy stages) if v2 fails
-    console.log("[Pipelines API] Falling back to v1 API (legacy stages)...")
     try {
       const v1Pipelines = await client.getV1Pipelines()
-      console.log("[Pipelines API] v1 Success, count:", v1Pipelines?.length || 0)
       
       // Transform v1 response - these are legacy stages, not real pipelines
       const pipelines = (v1Pipelines || []).map((p: any) => {
@@ -115,7 +109,6 @@ export async function POST(request: Request) {
       }, { status: 400 })
     }
 
-    console.log(`[Pipelines API] Creating pipeline: ${name} with ${stages?.length || 0} stages`)
     const client = new KeapClient(accessToken.value)
     
     // v2 API creates pipeline and stages in one call
@@ -128,7 +121,6 @@ export async function POST(request: Request) {
       name, 
       stages: stageNames 
     })
-    console.log("[Pipelines API] Pipeline created:", pipeline.id)
 
     return NextResponse.json({
       ...pipeline,
