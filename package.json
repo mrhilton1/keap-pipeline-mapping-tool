@@ -6,7 +6,20 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "eslint .",
-    "start": "next start"
+    "start": "next start",
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:auth": "playwright test e2e/auth.spec.ts",
+    "test:dashboard": "playwright test e2e/dashboard.spec.ts",
+    "test:pipeline": "playwright test e2e/pipeline-builder.spec.ts",
+    "test:mapping": "playwright test e2e/field-mapping.spec.ts",
+    "test:preview": "playwright test e2e/migration-preview.spec.ts",
+    "test:migration": "playwright test e2e/deal-migration.spec.ts",
+    "test:xmlrpc": "playwright test e2e/xmlrpc.spec.ts",
+    "test:edge": "playwright test e2e/edge-cases.spec.ts",
+    "test:report": "playwright show-report"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -63,6 +76,7 @@
     "zod": "3.25.76"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.1",
     "@tailwindcss/postcss": "^4.1.9",
     "@types/node": "^22",
     "@types/react": "^19",
