@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { 
   Play, 
   RefreshCw, 
@@ -14,125 +15,128 @@ import {
   ChevronDown,
   ChevronRight,
   ExternalLink,
-  Terminal
+  Terminal,
+  AlertTriangle,
+  Download
 } from 'lucide-react'
 
-interface TestResult {
-  name: string
+interface TestCase {
+  title: string
   status: 'passed' | 'failed' | 'skipped' | 'pending' | 'running'
   duration?: number
   error?: string
 }
 
 interface TestSuite {
-  name: string
   file: string
-  tests: TestResult[]
+  name: string
+  description: string
+  tests: TestCase[]
   status: 'idle' | 'running' | 'passed' | 'failed'
   expanded: boolean
+  duration?: number
 }
 
-const TEST_SUITES: Omit<TestSuite, 'status' | 'expanded'>[] = [
-  {
-    name: 'Authentication',
-    file: 'auth.spec.ts',
-    tests: [
-      { name: 'should show Connect to Keap button when not authenticated', status: 'pending' },
-      { name: 'should show disconnected status indicator', status: 'pending' },
-      { name: 'should show green status indicator after successful auth', status: 'pending' },
-      { name: 'should persist auth across page refreshes', status: 'pending' },
-      { name: 'should handle token refresh gracefully', status: 'pending' },
-    ]
-  },
-  {
-    name: 'Dashboard Loading',
-    file: 'dashboard.spec.ts',
-    tests: [
-      { name: 'should load opportunities from Keap API', status: 'pending' },
-      { name: 'should display opportunity count in header badge', status: 'pending' },
-      { name: 'should load pipelines from Keap API', status: 'pending' },
-      { name: 'should enrich opportunities with XML-RPC data', status: 'pending' },
-      { name: 'should show error state when API fails', status: 'pending' },
-    ]
-  },
-  {
-    name: 'Pipeline Builder',
-    file: 'pipeline-builder.spec.ts',
-    tests: [
-      { name: 'should show choice between Build New and Use Existing', status: 'pending' },
-      { name: 'should auto-populate stages from opportunity data', status: 'pending' },
-      { name: 'should allow drag-and-drop reordering', status: 'pending' },
-      { name: 'should create pipeline in Keap when clicking Create', status: 'pending' },
-      { name: 'should navigate to Field Mapping after creation', status: 'pending' },
-    ]
-  },
-  {
-    name: 'Field Mapping',
-    file: 'field-mapping.spec.ts',
-    tests: [
-      { name: 'should discover all fields from opportunities', status: 'pending' },
-      { name: 'should show XML-RPC enriched fields', status: 'pending' },
-      { name: 'should allow mapping source to target fields', status: 'pending' },
-      { name: 'should show Value (Average) option', status: 'pending' },
-      { name: 'should auto-match stages by name', status: 'pending' },
-    ]
-  },
-  {
-    name: 'Migration Preview',
-    file: 'migration-preview.spec.ts',
-    tests: [
-      { name: 'should show stage distribution summary', status: 'pending' },
-      { name: 'should display correct value calculations', status: 'pending' },
-      { name: 'should allow custom migration note', status: 'pending' },
-      { name: 'should insert merge fields at cursor', status: 'pending' },
-      { name: 'should show currency dropdown', status: 'pending' },
-    ]
-  },
-  {
-    name: 'Deal Migration',
-    file: 'deal-migration.spec.ts',
-    tests: [
-      { name: 'should create deals with correct stage', status: 'pending' },
-      { name: 'should set deal value from revenue mapping', status: 'pending' },
-      { name: 'should preserve contact and owner', status: 'pending' },
-      { name: 'should create notes in correct order', status: 'pending' },
-      { name: 'should show success/failure counts', status: 'pending' },
-    ]
-  },
-  {
-    name: 'XML-RPC Integration',
-    file: 'xmlrpc.spec.ts',
-    tests: [
-      { name: 'should fetch products for opportunities', status: 'pending' },
-      { name: 'should handle subscription products', status: 'pending' },
-      { name: 'should fetch stage move history', status: 'pending' },
-      { name: 'should parse XML-RPC dates correctly', status: 'pending' },
-      { name: 'should have debug page accessible', status: 'pending' },
-    ]
-  },
-  {
-    name: 'Edge Cases',
-    file: 'edge-cases.spec.ts',
-    tests: [
-      { name: 'should handle opportunities with no stage', status: 'pending' },
-      { name: 'should handle API timeouts gracefully', status: 'pending' },
-      { name: 'should handle 401 and prompt re-auth', status: 'pending' },
-      { name: 'should handle special characters', status: 'pending' },
-      { name: 'should handle rapid tab switching', status: 'pending' },
-    ]
-  },
-]
+interface TestStatus {
+  playwrightInstalled: boolean
+  playwrightVersion: string
+  browsersInstalled: boolean
+  testFileCount: number
+  ready: boolean
+  error?: string
+}
+
+interface PlaywrightResult {
+  suites?: Array<{
+    title: string
+    file: string
+    specs: Array<{
+      title: string
+      ok: boolean
+      tests: Array<{
+        status: string
+        duration: number
+        errors?: Array<{ message: string }>
+      }>
+    }>
+  }>
+  stats?: {
+    expected: number
+    unexpected: number
+    skipped: number
+    duration: number
+  }
+}
 
 export default function TestsPage() {
-  const [suites, setSuites] = useState<TestSuite[]>(
-    TEST_SUITES.map(s => ({ ...s, status: 'idle', expanded: false }))
-  )
+  const [suites, setSuites] = useState<TestSuite[]>([])
   const [isRunningAll, setIsRunningAll] = useState(false)
+  const [runningSuite, setRunningSuite] = useState<string | null>(null)
   const [lastRun, setLastRun] = useState<Date | null>(null)
   const [output, setOutput] = useState<string>('')
+  const [status, setStatus] = useState<TestStatus | null>(null)
+  const [statusLoading, setStatusLoading] = useState(true)
+  const outputRef = useRef<HTMLDivElement>(null)
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
+  // Load test status and suites on mount
+  useEffect(() => {
+    loadStatus()
+    loadSuites()
+  }, [])
+
+  // Auto-scroll output
+  useEffect(() => {
+    if (outputRef.current) {
+      outputRef.current.scrollTop = outputRef.current.scrollHeight
+    }
+  }, [output])
+
+  const loadStatus = async () => {
+    setStatusLoading(true)
+    try {
+      const res = await fetch('/api/tests/status')
+      const data = await res.json()
+      setStatus(data)
+    } catch (error) {
+      setStatus({
+        playwrightInstalled: false,
+        playwrightVersion: 'Error',
+        browsersInstalled: false,
+        testFileCount: 0,
+        ready: false,
+        error: String(error)
+      })
+    }
+    setStatusLoading(false)
+  }
+
+  const loadSuites = async () => {
+    try {
+      const res = await fetch('/api/tests/run')
+      const data = await res.json()
+      setSuites(data.suites.map((s: { file: string; name: string; description: string }) => ({
+        ...s,
+        tests: [],
+        status: 'idle',
+        expanded: false,
+      })))
+    } catch {
+      // Fallback to hardcoded suites
+      setSuites([
+        { file: 'auth.spec.ts', name: 'Authentication', description: 'OAuth flow, session persistence', tests: [], status: 'idle', expanded: false },
+        { file: 'dashboard.spec.ts', name: 'Dashboard Loading', description: 'Data loading, badges', tests: [], status: 'idle', expanded: false },
+        { file: 'pipeline-builder.spec.ts', name: 'Pipeline Builder', description: 'Create pipelines, stages', tests: [], status: 'idle', expanded: false },
+        { file: 'field-mapping.spec.ts', name: 'Field Mapping', description: 'Map fields, stage matching', tests: [], status: 'idle', expanded: false },
+        { file: 'migration-preview.spec.ts', name: 'Migration Preview', description: 'Preview, merge fields', tests: [], status: 'idle', expanded: false },
+        { file: 'deal-migration.spec.ts', name: 'Deal Migration', description: 'Create deals, notes', tests: [], status: 'idle', expanded: false },
+        { file: 'xmlrpc.spec.ts', name: 'XML-RPC Integration', description: 'Products, stage moves', tests: [], status: 'idle', expanded: false },
+        { file: 'edge-cases.spec.ts', name: 'Edge Cases', description: 'Error handling', tests: [], status: 'idle', expanded: false },
+      ])
+    }
+  }
+
+  const getStatusIcon = (testStatus: string) => {
+    switch (testStatus) {
       case 'passed':
         return <CheckCircle2 className="h-4 w-4 text-green-500" />
       case 'failed':
@@ -146,8 +150,8 @@ export default function TestsPage() {
     }
   }
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
+  const getStatusBadge = (suiteStatus: string) => {
+    switch (suiteStatus) {
       case 'passed':
         return <Badge className="bg-green-500/10 text-green-500 border-green-500/20">Passed</Badge>
       case 'failed':
@@ -165,88 +169,129 @@ export default function TestsPage() {
     ))
   }
 
-  const simulateTestRun = async (suiteIndex: number) => {
-    // Update suite to running
-    setSuites(prev => prev.map((s, i) => 
-      i === suiteIndex ? { ...s, status: 'running', expanded: true } : s
-    ))
-
-    // Simulate each test
-    const suite = suites[suiteIndex]
-    for (let testIndex = 0; testIndex < suite.tests.length; testIndex++) {
-      // Set test to running
-      setSuites(prev => prev.map((s, i) => {
-        if (i === suiteIndex) {
-          const newTests = [...s.tests]
-          newTests[testIndex] = { ...newTests[testIndex], status: 'running' }
-          return { ...s, tests: newTests }
-        }
-        return s
-      }))
-
-      // Wait random time
-      await new Promise(r => setTimeout(r, 500 + Math.random() * 1000))
-
-      // Random pass/fail (90% pass rate for demo)
-      const passed = Math.random() > 0.1
-      setSuites(prev => prev.map((s, i) => {
-        if (i === suiteIndex) {
-          const newTests = [...s.tests]
-          newTests[testIndex] = { 
-            ...newTests[testIndex], 
-            status: passed ? 'passed' : 'failed',
-            duration: Math.floor(500 + Math.random() * 2000),
-            error: passed ? undefined : 'Expected element to be visible'
-          }
-          return { ...s, tests: newTests }
-        }
-        return s
-      }))
-    }
-
-    // Update suite status
-    setSuites(prev => prev.map((s, i) => {
-      if (i === suiteIndex) {
-        const allPassed = s.tests.every(t => t.status === 'passed')
-        return { ...s, status: allPassed ? 'passed' : 'failed' }
-      }
-      return s
-    }))
-  }
-
-  const runSuite = async (index: number) => {
-    setOutput(`Running ${suites[index].name} tests...\n`)
-    await simulateTestRun(index)
-    setLastRun(new Date())
-  }
-
-  const runAllTests = async () => {
-    setIsRunningAll(true)
-    setOutput('Running all test suites...\n\n')
+  const parseResults = (results: PlaywrightResult) => {
+    const updatedSuites: Record<string, { tests: TestCase[], status: 'passed' | 'failed', duration: number }> = {}
     
-    // Reset all suites
-    setSuites(prev => prev.map(s => ({
-      ...s,
-      status: 'idle',
-      tests: s.tests.map(t => ({ ...t, status: 'pending' as const }))
-    })))
+    if (results.suites) {
+      for (const suite of results.suites) {
+        const fileName = suite.file.split('/').pop() || suite.file
+        const tests: TestCase[] = []
+        let suiteHasFailed = false
+        let suiteDuration = 0
+        
+        for (const spec of suite.specs) {
+          for (const test of spec.tests) {
+            const testPassed = test.status === 'passed' || test.status === 'expected'
+            if (!testPassed) suiteHasFailed = true
+            suiteDuration += test.duration || 0
+            
+            tests.push({
+              title: spec.title,
+              status: testPassed ? 'passed' : 'failed',
+              duration: test.duration,
+              error: test.errors?.[0]?.message,
+            })
+          }
+        }
+        
+        updatedSuites[fileName] = {
+          tests,
+          status: suiteHasFailed ? 'failed' : 'passed',
+          duration: suiteDuration,
+        }
+      }
+    }
+    
+    return updatedSuites
+  }
 
-    for (let i = 0; i < suites.length; i++) {
-      setOutput(prev => prev + `\n📦 ${TEST_SUITES[i].name}\n`)
-      await simulateTestRun(i)
+  const runTests = async (suiteFile?: string) => {
+    const isRunningSpecific = !!suiteFile
+    
+    if (isRunningSpecific) {
+      setRunningSuite(suiteFile)
+      setSuites(prev => prev.map(s => 
+        s.file === suiteFile ? { ...s, status: 'running', tests: [] } : s
+      ))
+    } else {
+      setIsRunningAll(true)
+      setSuites(prev => prev.map(s => ({ ...s, status: 'running', tests: [] })))
+    }
+    
+    setOutput(prev => prev + `\n🚀 Starting ${isRunningSpecific ? suiteFile : 'all tests'}...\n`)
+
+    try {
+      const response = await fetch('/api/tests/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ suite: suiteFile || 'all' }),
+      })
+
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+
+      if (!reader) {
+        throw new Error('No response body')
+      }
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        const text = decoder.decode(value)
+        const lines = text.split('\n').filter(line => line.startsWith('data: '))
+
+        for (const line of lines) {
+          try {
+            const data = JSON.parse(line.slice(6))
+            
+            if (data.type === 'log') {
+              setOutput(prev => prev + data.message + '\n')
+            } else if (data.type === 'results') {
+              const parsed = parseResults(data.data)
+              
+              setSuites(prev => prev.map(s => {
+                const result = parsed[s.file]
+                if (result) {
+                  return {
+                    ...s,
+                    tests: result.tests,
+                    status: result.status,
+                    duration: result.duration,
+                    expanded: true,
+                  }
+                }
+                return { ...s, status: 'idle' }
+              }))
+              
+              setOutput(prev => prev + `\n✅ Tests completed (exit code: ${data.exitCode})\n`)
+            } else if (data.type === 'raw') {
+              setOutput(prev => prev + `\n📄 Raw output:\n${data.output}\n`)
+            } else if (data.type === 'error') {
+              setOutput(prev => prev + `\n❌ Error: ${data.message}\n`)
+            }
+          } catch {
+            // Ignore parse errors
+          }
+        }
+      }
+    } catch (error) {
+      setOutput(prev => prev + `\n❌ Failed to run tests: ${error}\n`)
+      setSuites(prev => prev.map(s => ({ ...s, status: 'idle' })))
     }
 
     setIsRunningAll(false)
+    setRunningSuite(null)
     setLastRun(new Date())
-    setOutput(prev => prev + '\n✅ All tests completed!')
   }
 
   const resetTests = () => {
-    setSuites(TEST_SUITES.map(s => ({ 
+    setSuites(prev => prev.map(s => ({ 
       ...s, 
       status: 'idle', 
       expanded: false,
-      tests: s.tests.map(t => ({ ...t, status: 'pending' as const, duration: undefined, error: undefined }))
+      tests: [],
+      duration: undefined,
     })))
     setOutput('')
     setLastRun(null)
@@ -255,6 +300,7 @@ export default function TestsPage() {
   const passedCount = suites.reduce((acc, s) => acc + s.tests.filter(t => t.status === 'passed').length, 0)
   const failedCount = suites.reduce((acc, s) => acc + s.tests.filter(t => t.status === 'failed').length, 0)
   const totalTests = suites.reduce((acc, s) => acc + s.tests.length, 0)
+  const isRunning = isRunningAll || runningSuite !== null
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white p-8">
@@ -273,14 +319,15 @@ export default function TestsPage() {
             <Button 
               variant="outline" 
               onClick={resetTests}
+              disabled={isRunning}
               className="border-slate-600 text-slate-300 hover:bg-slate-700"
             >
               <RefreshCw className="h-4 w-4 mr-2" />
               Reset
             </Button>
             <Button 
-              onClick={runAllTests}
-              disabled={isRunningAll}
+              onClick={() => runTests()}
+              disabled={isRunning || !status?.ready}
               className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600"
             >
               {isRunningAll ? (
@@ -293,23 +340,55 @@ export default function TestsPage() {
           </div>
         </div>
 
+        {/* Status Alert */}
+        {statusLoading ? (
+          <Alert className="mb-6 bg-slate-800/50 border-slate-700">
+            <RefreshCw className="h-4 w-4 animate-spin" />
+            <AlertTitle>Checking Playwright status...</AlertTitle>
+          </Alert>
+        ) : !status?.ready ? (
+          <Alert className="mb-6 bg-yellow-500/10 border-yellow-500/30">
+            <AlertTriangle className="h-4 w-4 text-yellow-500" />
+            <AlertTitle className="text-yellow-400">Setup Required</AlertTitle>
+            <AlertDescription className="text-yellow-300/80">
+              <p className="mb-2">Playwright needs to be set up before running tests:</p>
+              <code className="block bg-slate-900 p-2 rounded text-sm mb-2">
+                pnpm exec playwright install chromium
+              </code>
+              <p className="text-xs">
+                Playwright: {status?.playwrightVersion || 'Not detected'} | 
+                Browsers: {status?.browsersInstalled ? 'Installed' : 'Not installed'} |
+                Test files: {status?.testFileCount || 0}
+              </p>
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <Alert className="mb-6 bg-green-500/10 border-green-500/30">
+            <CheckCircle2 className="h-4 w-4 text-green-500" />
+            <AlertTitle className="text-green-400">Ready to Run</AlertTitle>
+            <AlertDescription className="text-green-300/80">
+              Playwright {status.playwrightVersion} | {status.testFileCount} test files | Browsers installed
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Stats */}
         <div className="grid grid-cols-4 gap-4 mb-8">
           <Card className="bg-slate-800/50 border-slate-700">
             <CardContent className="p-4">
-              <div className="text-2xl font-bold text-white">{totalTests}</div>
+              <div className="text-2xl font-bold text-white">{totalTests || '-'}</div>
               <div className="text-sm text-slate-400">Total Tests</div>
             </CardContent>
           </Card>
           <Card className="bg-slate-800/50 border-slate-700">
             <CardContent className="p-4">
-              <div className="text-2xl font-bold text-green-400">{passedCount}</div>
+              <div className="text-2xl font-bold text-green-400">{passedCount || '-'}</div>
               <div className="text-sm text-slate-400">Passed</div>
             </CardContent>
           </Card>
           <Card className="bg-slate-800/50 border-slate-700">
             <CardContent className="p-4">
-              <div className="text-2xl font-bold text-red-400">{failedCount}</div>
+              <div className="text-2xl font-bold text-red-400">{failedCount || '-'}</div>
               <div className="text-sm text-slate-400">Failed</div>
             </CardContent>
           </Card>
@@ -341,27 +420,39 @@ export default function TestsPage() {
                     {getStatusIcon(suite.status)}
                     <div>
                       <div className="font-medium text-white">{suite.name}</div>
-                      <div className="text-xs text-slate-500">{suite.file}</div>
+                      <div className="text-xs text-slate-500">
+                        {suite.file}
+                        {suite.duration && ` • ${Math.round(suite.duration)}ms`}
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
+                    {suite.tests.length > 0 && (
+                      <span className="text-xs text-slate-400">
+                        {suite.tests.filter(t => t.status === 'passed').length}/{suite.tests.length}
+                      </span>
+                    )}
                     {getStatusBadge(suite.status)}
                     <Button
                       size="sm"
                       variant="ghost"
                       onClick={(e) => {
                         e.stopPropagation()
-                        runSuite(suiteIndex)
+                        runTests(suite.file)
                       }}
-                      disabled={suite.status === 'running' || isRunningAll}
+                      disabled={isRunning || !status?.ready}
                       className="text-slate-400 hover:text-white"
                     >
-                      <Play className="h-3 w-3" />
+                      {runningSuite === suite.file ? (
+                        <RefreshCw className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Play className="h-3 w-3" />
+                      )}
                     </Button>
                   </div>
                 </div>
                 
-                {suite.expanded && (
+                {suite.expanded && suite.tests.length > 0 && (
                   <div className="border-t border-slate-700 bg-slate-900/50">
                     {suite.tests.map((test, testIndex) => (
                       <div 
@@ -370,20 +461,26 @@ export default function TestsPage() {
                       >
                         <div className="flex items-center gap-3">
                           {getStatusIcon(test.status)}
-                          <span className="text-sm text-slate-300">{test.name}</span>
+                          <span className="text-sm text-slate-300">{test.title}</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          {test.duration && (
-                            <span className="text-xs text-slate-500">{test.duration}ms</span>
+                          {test.duration !== undefined && (
+                            <span className="text-xs text-slate-500">{Math.round(test.duration)}ms</span>
                           )}
                           {test.error && (
-                            <span className="text-xs text-red-400 max-w-[200px] truncate">
-                              {test.error}
+                            <span className="text-xs text-red-400 max-w-[200px] truncate" title={test.error}>
+                              {test.error.split('\n')[0]}
                             </span>
                           )}
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+                
+                {suite.expanded && suite.tests.length === 0 && suite.status === 'idle' && (
+                  <div className="border-t border-slate-700 bg-slate-900/50 p-4 text-center text-slate-500 text-sm">
+                    Click play to run this test suite
                   </div>
                 )}
               </Card>
@@ -400,8 +497,11 @@ export default function TestsPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="bg-slate-900 rounded-lg p-3 h-[300px] overflow-auto font-mono text-xs text-slate-400">
-                  {output || 'Click "Run All Tests" or run individual suites...'}
+                <div 
+                  ref={outputRef}
+                  className="bg-slate-900 rounded-lg p-3 h-[300px] overflow-auto font-mono text-xs text-slate-400 whitespace-pre-wrap"
+                >
+                  {output || 'Click "Run All Tests" or run individual suites to see output...'}
                 </div>
               </CardContent>
             </Card>
@@ -435,18 +535,34 @@ export default function TestsPage() {
                   <ExternalLink className="h-4 w-4 mr-2" />
                   Open Home Page
                 </Button>
+                <Button 
+                  variant="outline" 
+                  className="w-full justify-start border-slate-600 text-slate-300 hover:bg-slate-700"
+                  onClick={loadStatus}
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh Status
+                </Button>
               </CardContent>
             </Card>
 
-            <Card className="bg-blue-500/10 border-blue-500/20">
-              <CardContent className="p-4">
-                <div className="text-sm text-blue-300">
-                  <strong>Note:</strong> This is a simulated test runner UI. 
-                  For actual test execution, run:
+            <Card className="bg-slate-800/50 border-slate-700">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-slate-300">Terminal Commands</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-xs">
+                <div className="bg-slate-900 p-2 rounded">
+                  <code className="text-blue-300">pnpm test:ui</code>
+                  <span className="text-slate-500 ml-2">Interactive UI</span>
                 </div>
-                <code className="block mt-2 bg-slate-900 p-2 rounded text-xs text-blue-200">
-                  pnpm test:ui
-                </code>
+                <div className="bg-slate-900 p-2 rounded">
+                  <code className="text-blue-300">pnpm test:headed</code>
+                  <span className="text-slate-500 ml-2">Watch browser</span>
+                </div>
+                <div className="bg-slate-900 p-2 rounded">
+                  <code className="text-blue-300">pnpm test:debug</code>
+                  <span className="text-slate-500 ml-2">Debug mode</span>
+                </div>
               </CardContent>
             </Card>
           </div>
