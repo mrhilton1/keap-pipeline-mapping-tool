@@ -104,9 +104,9 @@ export default function AuthDebugPage() {
             <li>Look for <code>keap_access_token</code> and <code>keap_refresh_token</code></li>
           </ul>
 
-          <p className="mt-4"><strong>3. Check Vercel Logs:</strong></p>
+          <p className="mt-4"><strong>3. Check Cloudflare Logs:</strong></p>
           <ul className="list-disc list-inside ml-4 text-muted-foreground">
-            <li>Go to Vercel Dashboard → Your Project → Logs</li>
+            <li>Go to Cloudflare Dashboard → Workers → Your Worker → Logs</li>
             <li>Search for <code>[Keap OAuth Callback]</code></li>
             <li>Look for &quot;Token received!&quot; and &quot;Setting cookies&quot;</li>
           </ul>

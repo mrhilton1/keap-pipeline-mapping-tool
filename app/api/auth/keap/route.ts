@@ -18,7 +18,8 @@ function getOrigin(request: NextRequest): string {
   
   // Fall back to env var
   return process.env.KEAP_REDIRECT_URI?.replace("/api/auth/keap/callback", "") 
-    || "https://v0-opps2pipelines.vercel.app"
+    || process.env.NEXT_PUBLIC_APP_URL
+    || ""
 }
 
 export async function GET(request: NextRequest) {
@@ -33,7 +34,7 @@ export async function GET(request: NextRequest) {
       console.error("[Keap OAuth] Missing KEAP_CLIENT_ID")
       return NextResponse.json({ 
         error: "Keap client ID not configured",
-        help: "Set KEAP_CLIENT_ID in Vercel environment variables"
+        help: "Set KEAP_CLIENT_ID in Cloudflare Worker secrets"
       }, { status: 500 })
     }
 

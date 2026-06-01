@@ -15,5 +15,5 @@ export async function GET(request: NextRequest) {
   
   
   // Redirect to home
-  return NextResponse.redirect(new URL("/", process.env.NEXT_PUBLIC_APP_URL || "https://v0-opps2pipelines.vercel.app"))
+  return NextResponse.redirect(new URL("/", process.env.NEXT_PUBLIC_APP_URL || "/"))
 }

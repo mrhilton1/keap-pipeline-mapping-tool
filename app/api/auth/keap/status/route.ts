@@ -16,7 +16,8 @@ function getOrigin(request: NextRequest): string {
   }
   
   return process.env.KEAP_REDIRECT_URI?.replace("/api/auth/keap/callback", "") 
-    || "https://v0-opps2pipelines.vercel.app"
+    || process.env.NEXT_PUBLIC_APP_URL
+    || ""
 }
 
 // Actually test if the token works by calling Keap API
@@ -97,7 +98,7 @@ export async function GET(request: NextRequest) {
         step2: "Create or select your app",
         step3: "Add this EXACT redirect URI:",
         redirectUri: envRedirectUri || dynamicRedirectUri,
-        step4: "Copy Client ID and Client Secret to Vercel env vars",
+        step4: "Copy Client ID and Client Secret to Cloudflare Worker secrets",
       },
       cookies: {
         hasAccessToken: !!accessToken,

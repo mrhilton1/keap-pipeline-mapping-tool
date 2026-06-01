@@ -16,7 +16,8 @@ function getOrigin(request: NextRequest): string {
   }
   
   return process.env.KEAP_REDIRECT_URI?.replace("/api/auth/keap/callback", "") 
-    || "https://v0-opps2pipelines.vercel.app"
+    || process.env.NEXT_PUBLIC_APP_URL
+    || ""
 }
 
 export async function GET(request: NextRequest) {

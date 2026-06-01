@@ -156,7 +156,7 @@ export function KeapStatusIndicator() {
                 <p className="text-red-600 dark:text-red-400 font-medium">Configuration Error</p>
                 <p className="text-muted-foreground">{error}</p>
                 <p className="text-muted-foreground mt-1">
-                  Set in Vercel: KEAP_CLIENT_ID, KEAP_CLIENT_SECRET, KEAP_REDIRECT_URI
+                  Set in Cloudflare Worker secrets: KEAP_CLIENT_ID, KEAP_CLIENT_SECRET, KEAP_REDIRECT_URI
                 </p>
               </>
             )}
