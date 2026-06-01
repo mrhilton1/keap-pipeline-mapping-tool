@@ -6,25 +6,15 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
-  generator: 'v0.app',
+  title: 'Keap Pipeline Migration Tool',
+  description: 'Analyze opportunities, build pipelines with AI, and migrate deals.',
   icons: {
     icon: [
       {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
+        url: 'https://assets.thryv.com/prod/media/2024/08/cropped-thryv-favicon-32-32x32.png',
+        sizes: '32x32',
       },
     ],
-    apple: '/apple-icon.png',
   },
 }
 
